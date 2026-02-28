@@ -1,87 +1,98 @@
 """
-Exercise Database
+Workout Engine — Exercise Database
 
-Manages the seeded exercise database. Exercises are stored in
-data/exercises.json and loaded into memory at startup.
-Provides filtering by equipment, muscle group, and difficulty.
+Handles loading and querying the local JSON database of exercises.
+This ensures the LLM only generates workout plans using exercises that
+we actually have data (instructions, muscles, equipment) for.
 """
 
-from __future__ import annotations
+import json
+import logging
+from pathlib import Path
+from typing import List
 
-from typing import Any
+from app.models.workout import Exercise
 
-from pydantic import BaseModel
+logger = logging.getLogger(__name__)
 
-
-class Exercise(BaseModel):
-    """An exercise in the FitCrave database."""
-
-    id: str
-    name: str
-    muscle_groups: list[str]  # e.g., ["chest", "triceps", "front_delts"]
-    equipment: list[str]      # e.g., ["barbell", "bench"]
-    difficulty: str           # "beginner", "intermediate", "advanced"
-    type: str                 # "compound" or "isolation"
-    category: str             # "strength", "cardio", "flexibility", "plyometric"
-    instructions: str
-    video_url: str | None = None
+# Path to the downloaded exercises.json
+DB_PATH = Path(__file__).parent / "data" / "exercises.json"
 
 
-_exercise_cache: list[Exercise] = []
-
-
-async def load_exercise_database() -> None:
+class ExerciseDatabase:
     """
-    Load exercise database from data/exercises.json into memory.
-
-    Called once at application startup.
-
-    TODO: Load and parse the JSON file.
+    In-memory database of all available exercises loaded from JSON.
     """
-    global _exercise_cache
-    # TODO: Load from app/engines/workout/data/exercises.json
-    pass
 
+    def __init__(self):
+        self.exercises: List[Exercise] = []
+        self._load_database()
 
-def filter_exercises(
-    equipment: list[str] | None = None,
-    muscle_groups: list[str] | None = None,
-    difficulty: str | None = None,
-    category: str | None = None,
-) -> list[Exercise]:
-    """
-    Filter exercises based on user's available equipment and target muscles.
+    def _load_database(self) -> None:
+        """Loads and parses the JSON file into Pydantic models."""
+        if not DB_PATH.exists():
+            logger.error(f"Failed to find exercise database at {DB_PATH}")
+            return
 
-    Args:
-        equipment: User's available equipment. Only returns exercises
-                   whose required equipment is a subset of this list.
-        muscle_groups: Filter by target muscle groups.
-        difficulty: Filter by difficulty level.
-        category: Filter by category (strength, cardio, etc.).
+        try:
+            with open(DB_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                
+            self.exercises = [Exercise(**item) for item in data]
+            logger.info(f"Successfully loaded {len(self.exercises)} exercises into memory.")
+        except Exception as e:
+            logger.error(f"Error loading exercise database: {str(e)}")
 
-    Returns:
-        Filtered list of exercises.
-    """
-    results = _exercise_cache
+    def get_all_equipment(self) -> List[str]:
+        """Returns a unique list of all equipment requirements."""
+        return sorted({ex.equipment for ex in self.exercises})
 
-    if equipment is not None:
-        equipment_set = set(equipment) | {"bodyweight"}  # Always include bodyweight
-        results = [
-            e for e in results
-            if set(e.equipment).issubset(equipment_set)
-        ]
+    def get_all_target_muscles(self) -> List[str]:
+        """Returns a unique list of all primary target muscles."""
+        muscles = set()
+        for ex in self.exercises:
+            muscles.update(ex.primaryMuscles)
+        return sorted(list(muscles))
 
-    if muscle_groups is not None:
-        mg_set = set(muscle_groups)
-        results = [
-            e for e in results
-            if mg_set.intersection(set(e.muscle_groups))
-        ]
+    def get_all_categories(self) -> List[str]:
+        """Returns a unique list of all categories."""
+        return sorted({ex.category for ex in self.exercises})
 
-    if difficulty is not None:
-        results = [e for e in results if e.difficulty == difficulty]
+    def filter_exercises(
+        self,
+        target_muscle: str = None,
+        category: str = None,
+        equipment: str = None,
+        name_query: str = None,
+        limit: int = 50
+    ) -> List[Exercise]:
+        """
+        Retrieves a filtered list of exercises.
+        
+        Args:
+            target_muscle: Exact match for a specific muscle (e.g., 'pectorals')
+            body_part: Exact match for a broad region (e.g., 'chest')
+            equipment: Exact match for required equipment (e.g., 'barbell')
+            name_query: Partial string match (case-insensitive) on the name
+            limit: Maximum number of results to return
+        """
+        results = self.exercises
 
-    if category is not None:
-        results = [e for e in results if e.category == category]
+        if target_muscle:
+            results = [ex for ex in results if any(target_muscle.lower() in m.lower() for m in ex.primaryMuscles)]
+        
+        if category:
+            results = [ex for ex in results if ex.category.lower() == category.lower()]
 
-    return results
+        if equipment:
+            results = [ex for ex in results if ex.equipment and ex.equipment.lower() == equipment.lower()]
+
+        if name_query:
+            query = name_query.lower()
+            results = [ex for ex in results if query in ex.name.lower()]
+
+        return results[:limit]
+
+# Initialize a global instance to be imported and used by the orchestrator/engines
+# so that the JSON is only loaded from disk once on startup.
+exercise_db = ExerciseDatabase()

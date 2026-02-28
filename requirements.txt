@@ -1,15 +1,17 @@
 # Core Framework
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
-pydantic==2.10.4
+pydantic==2.12.5          # Bumped from 2.10.4 to match installed env; avoids downgrade
 pydantic-settings==2.7.1
 python-dotenv==1.0.1
 
 # AI / LLM
-google-genai==1.5.0
-langgraph==0.2.74
-langchain-core==0.3.34
-langchain-google-genai==2.0.14
+# NOTE: langchain-google-genai 4.x requires google-genai >= 1.56.0.
+# All three packages are pinned together for compatibility.
+google-genai==1.65.0          # Bumped: 1.5.0 → 1.65.0 (required by langchain-google-genai 4.x)
+langgraph==1.0.10             # Bumped: 0.2.74 → 1.0.10 (latest stable)
+langchain-core==1.2.5            # Bumped: 0.3.34 → 1.2.5 (required by langchain-google-genai 4.x and langgraph-prebuilt 1.x)
+langchain-google-genai==4.2.1 # Fixed: 2.0.14 doesn't exist; 4.2.1 is latest stable
 
 # Database
 motor==3.7.0
@@ -17,24 +19,26 @@ pymongo==4.11.3
 beanie==1.27.0
 
 # Firebase (Auth verification + FCM)
+# WARNING: firebase-admin may conflict with protobuf >= 6.x
+# If conflicts occur run: pip install firebase-admin==6.6.0 --no-deps
 firebase-admin==6.6.0
 
 # Image Processing
-Pillow==11.1.0
+Pillow==11.1.0            # Pinned to 11.x; Pillow 12.x may have breaking API changes
 python-multipart==0.0.20
 
 # Scheduling
 apscheduler==3.11.0
 
-# HTTP Client (for external APIs)
-httpx==0.28.1
+# HTTP Client
+httpx==0.28.1             # Bumped from 0.27.0; FastAPI/langchain-core require 0.28.x
 
 # Utilities
 python-jose[cryptography]==3.3.0
 passlib==1.7.4
 
 # Development
-pytest==8.3.4
-pytest-asyncio==0.25.2
+pytest==8.3.4             # Pinned; avoid pytest 9.x major bump
+pytest-asyncio==0.25.2    # CRITICAL PIN: 1.x has breaking asyncio_mode API changes
 black==24.10.0
 ruff==0.8.6
