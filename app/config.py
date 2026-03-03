@@ -16,8 +16,8 @@ class Settings(BaseSettings):
 
     # --- Google Gemini ---
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.0-flash"
-    GEMINI_VISION_MODEL: str = "gemini-2.0-flash"
+    GEMINI_MODEL: str = "gemini-3-flash-preview"
+    GEMINI_VISION_MODEL: str = "gemini-3-flash-preview"
 
     # --- MongoDB ---
     MONGODB_URI: str = "mongodb://localhost:27017"
