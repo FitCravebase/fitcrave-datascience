@@ -9,7 +9,7 @@ import json
 from typing import Any, List
 import logging
 
-from app.models.workout import WorkoutPlan
+from app.models.workout import WorkoutPlan, LLMWorkoutPlan
 from app.utils.prompts import FITCRAVE_SYSTEM_INSTRUCTION
 from app.utils.llm_client import gemini_client
 
@@ -56,7 +56,8 @@ Each session object contains:
 
 Each exercise object contains:
 - exercise_name: string
-- sets_reps: string (e.g., "3x10-12" or "4 sets of 8")
+- target_sets: int (e.g., 4)
+- target_reps: int (e.g., 10)
 - rest_seconds: int (e.g., 90)
 - notes: string or null
 """
@@ -96,8 +97,11 @@ async def generate_workout_plan(
         temperature=0.2
     )
     
-    # Parse the dictionary back into the Pydantic WorkoutPlan schema
-    plan = WorkoutPlan.model_validate(raw_json_dict)
+    # Parse the dictionary back into the lean LLM Pydantic schema
+    llm_plan = LLMWorkoutPlan.model_validate(raw_json_dict)
+    
+    # Expand the lean LLM representation into the full Firestore schema (with WorkoutSet arrays)
+    plan = llm_plan.to_firestore_model()
     
     return plan
 
