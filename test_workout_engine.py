@@ -5,7 +5,7 @@ from datetime import datetime
 from app.engines.workout.exercise_db import exercise_db
 from app.engines.workout.plan_generator import generate_workout_plan
 from app.engines.workout.progressive_overload import check_progression
-from app.models.workout import WorkoutSet
+from app.models.workout import WorkoutPlan
 
 async def run_demo():
     print("=========================================")

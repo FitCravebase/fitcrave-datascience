@@ -26,25 +26,16 @@ class Exercise(BaseModel):
     category: str = Field(..., description="e.g., 'strength', 'stretching'")
 
 
-class WorkoutSet(BaseModel):
-    """
-    Represents a single set of an exercise performed or planned.
-    """
-    set_number: int = Field(..., description="The order of the set (1, 2, 3...)")
-    target_reps: int = Field(..., description="The planned number of repetitions")
-    actual_reps: Optional[int] = Field(None, description="The actual number of repetitions performed")
-    target_rpe: Optional[float] = Field(None, description="Target Rate of Perceived Exertion (1.0 - 10.0)")
-    actual_rpe: Optional[float] = Field(None, description="Actual RPE recorded by user")
-    weight_kg: float = Field(0.0, description="Weight used in kg. 0 indicates bodyweight.")
-    rest_seconds: int = Field(90, description="Rest period after this set in seconds")
+
 
 
 class PlannedExercise(BaseModel):
     """
-    Represents an exercise as part of a workout session, containing its sets.
+    Represents an exercise as part of a workout session, using compressed set notation.
     """
     exercise_name: str = Field(..., description="The name of the exercise to perform")
-    sets: List[WorkoutSet] = Field(..., description="The planned sets for this exercise")
+    sets_reps: str = Field(..., description="Compressed notation (e.g., '3 sets of 8-12', '4x10', '3x Failure')")
+    rest_seconds: int = Field(90, description="Rest period in seconds (e.g., 60, 90)")
     notes: Optional[str] = Field(None, description="Any specific form cues or LLM coaching notes")
 
 

@@ -51,7 +51,7 @@ async def process_new_plan(user_id: str, doc_dict: dict):
             height_cm=doc_dict.get("height") or 170.0,
             weight_kg=doc_dict.get("weight") or 70.0,
             target_timeline=doc_dict.get("target_timeline"),
-            goal=doc_dict.get("goal") or "General Fitness",
+            goal=doc_dict.get("swp_goal") or "General Fitness",
             experience_level=doc_dict.get("experience_level") or "beginner",
             weekly_available_days=doc_dict.get("weekly_available_days") or 3,
             session_duration_minutes=int(doc_dict.get("session_duration_minutes") or 45),

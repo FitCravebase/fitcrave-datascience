@@ -56,14 +56,9 @@ Each session object contains:
 
 Each exercise object contains:
 - exercise_name: string
+- sets_reps: string (e.g., "3x10-12" or "4 sets of 8")
+- rest_seconds: int (e.g., 90)
 - notes: string or null
-- sets: list of set objects
-
-Each set object contains:
-- set_number: int
-- target_reps: int
-- weight_kg: float
-- rest_seconds: int
 """
 
 async def generate_workout_plan(
