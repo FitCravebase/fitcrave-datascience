@@ -43,7 +43,8 @@ class UserProfile(BaseModel):
     age: int
     weight_kg: float
     height_cm: float
-    gender: str  # "male" or "female"
+    gender: str  # "male", "female", or "other"
+    target_timeline: str | None = None
 
     # Fitness Profile
     activity_level: str = "moderately_active"
@@ -72,5 +73,6 @@ class UserProfile(BaseModel):
     # Tracking
     fcm_token: str | None = None  # For push notifications
     onboarding_complete: bool = False
+    injuries: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
