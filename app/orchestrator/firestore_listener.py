@@ -49,7 +49,7 @@ async def process_new_plan(user_id: str, doc_dict: dict):
             age=doc_dict.get("age") or 25,
             gender=doc_dict.get("gender") or "prefer_not_to_say",
             height_cm=doc_dict.get("height") or 170.0,
-            weight_kg=doc_dict.get("weight") or 70.0,
+            weight_kg=doc_dict.get("weight_kg") or doc_dict.get("weight") or 70.0,
             target_timeline=doc_dict.get("target_timeline"),
             goal=doc_dict.get("swp_goal") or "General Fitness",
             experience_level=doc_dict.get("experience_level") or "beginner",
@@ -62,10 +62,10 @@ async def process_new_plan(user_id: str, doc_dict: dict):
             allergies=[]
         )
         
-        # 3. Generate the plan using Gemini Multi-turn Orchestrator
+        # 3. Generate the plan using Gemini (with progressive overload weights)
         print(f"🧠 Prompting Gemini 2.0 to generate a specialized {user_profile.experience_level} {user_profile.goal} plan...")
         
-        plan = await generate_workout_plan(user_profile)
+        plan = await generate_workout_plan(user_profile, db=db)
         
         # 4. Save the generated plan back to Firestore!
         print(f"💾 Saving {plan.plan_name} to Firestore > users/{user_id}/workout_plans")

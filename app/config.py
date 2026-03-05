@@ -28,6 +28,7 @@ class Settings(BaseSettings):
 
     # --- External APIs ---
     CALORIENINJA_API_KEY: str = ""
+    YOUTUBE_API_KEY: str = ""
 
     # --- Notification Scheduling ---
     DAILY_BRIEFING_CRON: str = "0 7 * * *"

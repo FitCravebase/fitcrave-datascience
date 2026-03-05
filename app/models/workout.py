@@ -24,6 +24,7 @@ class Exercise(BaseModel):
     secondaryMuscles: List[str] = Field(default_factory=list, description="Other muscles worked")
     instructions: List[str] = Field(default_factory=list, description="Step-by-step instructions")
     category: str = Field(..., description="e.g., 'strength', 'stretching'")
+    video_id: Optional[str] = Field(None, description="YouTube Video ID")
 
 
 
@@ -48,6 +49,8 @@ class PlannedExercise(BaseModel):
     exercise_name: str = Field(..., description="The name of the exercise to perform")
     sets: List[WorkoutSet] = Field(..., description="The planned sets for this exercise")
     notes: Optional[str] = Field(None, description="Any specific form cues or LLM coaching notes")
+    video_id: Optional[str] = Field(None, description="Direct YouTube Video ID if available")
+    youtube_search_url: Optional[str] = Field(None, description="Fallback URL to search YouTube if video_id is missing")
 
 class WorkoutSession(BaseModel):
     """
@@ -81,6 +84,8 @@ class LLMPlannedExercise(BaseModel):
     target_sets: int = Field(..., description="Number of sets")
     target_reps: int = Field(..., description="Target reps per set")
     rest_seconds: int = Field(90, description="Rest period in seconds")
+    weight_kg: float = Field(0.0, description="Suggested starting weight in kg. Use 0.0 for bodyweight exercises.")
+    target_rpe: Optional[float] = Field(None, description="Target RPE (1-10). E.g. 7.0 means 3 reps left in the tank.")
     notes: Optional[str] = Field(None, description="Specific form cues or notes")
     
     def to_firestore_model(self) -> PlannedExercise:
@@ -88,7 +93,9 @@ class LLMPlannedExercise(BaseModel):
             WorkoutSet(
                 set_number=i+1, 
                 target_reps=self.target_reps, 
-                rest_seconds=self.rest_seconds
+                rest_seconds=self.rest_seconds,
+                weight_kg=self.weight_kg,
+                target_rpe=self.target_rpe,
             )
             for i in range(self.target_sets)
         ]

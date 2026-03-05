@@ -6,10 +6,16 @@ goal, experience level, available equipment, and recovery status.
 """
 
 import json
-from typing import Any, List
 import logging
+from typing import Any, Dict, List, Optional
+from urllib.parse import quote_plus
+from thefuzz import process, fuzz
 
 from app.models.workout import WorkoutPlan, LLMWorkoutPlan
+from app.engines.workout.exercise_db import exercise_db
+from app.engines.workout.progressive_overload_calculator import (
+    get_starting_weight, compute_overload_weights
+)
 from app.utils.prompts import FITCRAVE_SYSTEM_INSTRUCTION
 from app.utils.llm_client import gemini_client
 
@@ -22,6 +28,7 @@ Generate a personalized {days_per_week}-day weekly workout plan.
 Goal: {goal}
 Target Timeline: {target_timeline}
 Experience level: {experience_level}
+Body Weight: {body_weight_kg} kg
 Session Target Duration: {session_duration} mins
 
 ## Medical/Injury Constraints
@@ -31,13 +38,17 @@ Injuries to avoid straining: {injuries}
 You MUST ONLY assign exercises that can be performed with the following available equipment:
 {equipment}
 
+## Weight / Loading Instructions
+{weight_instructions}
+
 ## Instructions
-1. Design a {split_type} split.
+1. Recommend the optimal split (Full Body, Upper/Lower, PPL, or Custom) based on the user's goal, experience level, equipment, days per week, and session duration.
 2. For each day, select 4-6 highly effective exercises appropriate for the user's experience level and equipment.
 3. DO NOT assign any exercises that strain the user's listed injuries!
 4. Ensure the total workout duration stays near the target duration of {session_duration} minutes.
-5. Specify target reps, sets, RPE (Rate of Perceived Exertion), and rest times.
-6. Provide high-level weekly coaching notes.
+5. Specify target reps, sets, RPE (Rate of Perceived Exertion), rest times, and a starting weight for EVERY exercise.
+6. For bodyweight exercises (push-ups, pull-ups, planks, etc.) set weight_kg to 0.0.
+7. Provide high-level weekly coaching notes.
 
 You must respond STRICTLY fulfilling the provided JSON schema. Ensure your response is valid JSON matching the exact schema definition.
 
@@ -59,35 +70,62 @@ Each exercise object contains:
 - target_sets: int (e.g., 4)
 - target_reps: int (e.g., 10)
 - rest_seconds: int (e.g., 90)
+- weight_kg: float (e.g., 60.0 — suggested working weight in kg; 0.0 for bodyweight)
+- target_rpe: float (e.g., 7.5 — target exertion on a 1-10 scale; 7=3 reps left, 8=2 reps left, 9=1 rep left)
 - notes: string or null
 """
 
 async def generate_workout_plan(
-    user_context: Any # Expecting UserProfile
+    user_context: Any,  # Expecting UserProfile
+    db=None,            # Firestore AsyncClient — used for progressive overload lookup
 ) -> WorkoutPlan:
     """
     Generate a personalized workout plan using Gemini and structured outputs.
+    Prescribes weights using:
+      - Progressive overload history (if workout_logs exist)
+      - ExRx.net population-based strength standards (first plan)
     """
-    
     equipment_str = ", ".join(user_context.equipment) if user_context.equipment else "body weight only"
-    injuries_str = ", ".join(user_context.injuries) if user_context.injuries else "None"
-    target_timeline_str = user_context.target_timeline if user_context.target_timeline else "No specific timeline"
-    
-    days_per_week = user_context.weekly_available_days
+    injuries_str  = ", ".join(user_context.injuries)  if user_context.injuries  else "None"
+    target_timeline_str = user_context.target_timeline or "No specific timeline"
+    body_weight_kg = getattr(user_context, 'weight_kg', 70.0)
     experience_level = user_context.experience_level
-    goal = user_context.goal
-    
-    split_type = suggest_split_type(days_per_week, experience_level)
-    
+
+    # ── Weight context for the prompt ─────────────────────────────────────
+    overload_weights: Dict[str, float] = {}
+    if db and hasattr(user_context, 'firebase_uid'):
+        try:
+            overload_weights = compute_overload_weights(user_context.firebase_uid, db)
+        except Exception as e:
+            logger.warning(f"Could not compute overload weights: {e}")
+
+    if overload_weights:
+        lines = [f"  - {name}: {kg} kg" for name, kg in overload_weights.items()]
+        weight_instructions = (
+            "The user has previous workout data. Use these EXACT weights from their last session "
+            "(already adjusted for progressive overload). If an exercise is not listed below, "
+            "prescribe a sensible weight based on the user's bodyweight and experience:\n"
+            + "\n".join(lines)
+        )
+    else:
+        weight_instructions = (
+            f"This is likely the user's FIRST plan. Prescribe conservative starting weights "
+            f"using population-based strength standards (ExRx.net). "
+            f"User bodyweight is {body_weight_kg} kg, experience level is {experience_level}. "
+            f"For beginners, target roughly 40-60% of estimated 1RM. "
+            f"For bodyweight exercises, set weight_kg to 0.0."
+        )
+
     prompt = WORKOUT_PLAN_PROMPT.format(
-        days_per_week=days_per_week,
-        goal=goal,
+        days_per_week=user_context.weekly_available_days,
+        goal=user_context.goal,
         target_timeline=target_timeline_str,
         experience_level=experience_level,
+        body_weight_kg=body_weight_kg,
         session_duration=user_context.session_duration_minutes,
         equipment=equipment_str,
         injuries=injuries_str,
-        split_type=split_type
+        weight_instructions=weight_instructions,
     )
 
     # Call Gemini JSON mode
@@ -103,15 +141,34 @@ async def generate_workout_plan(
     # Expand the lean LLM representation into the full Firestore schema (with WorkoutSet arrays)
     plan = llm_plan.to_firestore_model()
     
+    # --- PHASE 3: Fuzzy Matching & YouTube Fallback ---
+    # Create a simple dictionary of allowed names to their objects for fast lookup
+    allowed_names = {ex.name: ex for ex in exercise_db.exercises}
+    allowed_name_list = list(allowed_names.keys())
+    
+    for session in plan.sessions:
+        for p_ex in session.exercises:
+            best_match, score = process.extractOne(
+                p_ex.exercise_name, 
+                allowed_name_list, 
+                scorer=fuzz.token_sort_ratio
+            )
+            
+            if score >= 85:
+                # Strong match! We can safely use our DB exercise and its specific video ID
+                matched_db_ex = allowed_names[best_match]
+                p_ex.exercise_name = matched_db_ex.name # Correct the typo into official name
+                p_ex.video_id = matched_db_ex.video_id
+            else:
+                # Weak or no match (LLM hallucinated a completely new valid exercise)
+                # Fallback to the Universal YouTube search link
+                query = quote_plus(f"How to do {p_ex.exercise_name} exercise proper form tutorial")
+                p_ex.youtube_search_url = f"https://www.youtube.com/results?search_query={query}"
+                p_ex.video_id = None
+                
+                logger.warning(
+                    f"Exercise '{p_ex.exercise_name}' not found locally (Best match: {best_match} @ {score}%). "
+                    f"Generated fallback URL."
+                )
+    
     return plan
-
-
-def suggest_split_type(days_per_week: int, experience_level: str) -> str:
-    """Suggest the best training split based on user parameters."""
-    if experience_level == "beginner":
-        return "Full Body"
-    if days_per_week <= 3:
-        return "Full Body"
-    if days_per_week == 4:
-        return "Upper/Lower"
-    return "Push/Pull/Legs"
