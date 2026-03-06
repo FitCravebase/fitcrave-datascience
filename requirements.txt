@@ -36,6 +36,7 @@ httpx==0.28.1             # Bumped from 0.27.0; FastAPI/langchain-core require 0
 # Utilities
 python-jose[cryptography]==3.3.0
 passlib==1.7.4
+rapidfuzz==3.12.2
 
 # Development
 pytest==8.3.4             # Pinned; avoid pytest 9.x major bump
