@@ -274,10 +274,12 @@ async def log_meal_endpoint(req: LogMealRequest):
 @router.get("/meal-log/{user_id}/today")
 async def get_today_logs(user_id: str):
     """Get today's logged meals and daily summary."""
-    from app.engines.nutrition.meal_logger import get_daily_logs, get_daily_summary
+    from app.engines.nutrition.meal_logger import get_daily_logs, _compute_summary
+    from datetime import datetime, timezone
 
-    logs = await get_daily_logs(user_id)
-    summary = await get_daily_summary(user_id)
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    logs = await get_daily_logs(user_id, date_str)
+    summary = _compute_summary(logs, date_str)
 
     return {"logs": logs, "summary": summary}
 
@@ -316,6 +318,111 @@ async def correct_mealsnap(req: MealSnapCorrectionRequest):
     corrected = await apply_user_correction(original, req.corrections, req.user_id)
     return corrected.model_dump()
 
+
+@router.post("/targets/{user_id}/mess-menu/analyze")
+async def analyze_mess_menu_endpoint(
+    user_id: str,
+    image: UploadFile = File(...),
+    additional_items: str = Form(None),
+):
+    """Analyze a mess menu image and generate a weekly meal plan."""
+    from app.engines.nutrition.mess_menu_analyzer import analyze_mess_menu
+    import json
+
+    # Parse additional items
+    custom_items = []
+    if additional_items:
+        try:
+            custom_items = json.loads(additional_items)
+        except json.JSONDecodeError:
+            pass
+
+    # Get user targets
+    user = await users_collection().find_one({"firebase_uid": user_id})
+    if not user:
+        # Create a stub if MongoDB sync hasn't run yet
+        user = {"firebase_uid": user_id}
+        
+    targets_data = user.get("current_targets", {})
+    if not targets_data:
+        targets_data = {
+            "calories": user.get("weight_kg", 70) * 24 * 1.5, # Rough estimate if missing
+            "protein_g": user.get("weight_kg", 70) * 2,
+            "carbs_g": 250,
+            "fat_g": 70
+        }
+        
+    diet_pref = "Vegetarian" if "vegetarian" in [r.lower() for r in user.get("dietary_restrictions", [])] else "Non-Vegetarian"
+        
+    contents = await image.read()
+    mime_type = image.content_type
+    
+    # If flutter didn't send a valid image mime type (e.g., it sent application/octet-stream), 
+    # default to image/jpeg so Gemini doesn't reject it.
+    if not mime_type or mime_type == "application/octet-stream":
+        if image.filename and image.filename.lower().endswith('.png'):
+            mime_type = "image/png"
+        else:
+            mime_type = "image/jpeg"
+
+    result = await analyze_mess_menu(contents, targets_data, diet_pref, custom_items, mime_type)
+    
+    # Save the weekly plan to MongoDB
+    plan_dict = result.model_dump()
+    await users_collection().update_one(
+        {"firebase_uid": user_id},
+        {"$set": {"current_weekly_mess_plan": plan_dict}},
+        upsert=True
+    )
+    
+    return plan_dict
+
+
+@router.get("/targets/{user_id}/mess-menu")
+async def get_weekly_mess_plan_endpoint(user_id: str):
+    """Retrieve the user's cached weekly mess plan."""
+    user = await users_collection().find_one({"firebase_uid": user_id})
+    if not user or "current_weekly_mess_plan" not in user:
+        raise HTTPException(
+            status_code=404,
+            detail="No weekly mess plan found. Scan a menu first.",
+        )
+    return user["current_weekly_mess_plan"]
+
+
+class AddCustomItemRequest(BaseModel):
+    user_id: str
+    instruction: str
+
+
+@router.post("/targets/{user_id}/mess-menu/add-item")
+async def add_item_to_mess_menu_endpoint(
+    user_id: str,
+    req: AddCustomItemRequest
+):
+    """Adds a custom item to the cached mass menu plan via LLM editing."""
+    from app.engines.nutrition.mess_menu_editor import edit_mess_menu
+
+    # Get the cached plan
+    user = await users_collection().find_one({"firebase_uid": user_id})
+    if not user or "current_weekly_mess_plan" not in user:
+        raise HTTPException(
+            status_code=404,
+            detail="No weekly mess plan found. Scan a menu first.",
+        )
+    
+    current_plan = user["current_weekly_mess_plan"]
+    
+    # Edit the plan
+    updated_plan = await edit_mess_menu(current_plan, req.instruction)
+    
+    # Save the updated plan to MongoDB
+    await users_collection().update_one(
+        {"firebase_uid": user_id},
+        {"$set": {"current_weekly_mess_plan": updated_plan}}
+    )
+    
+    return updated_plan
 
 # ── Food Search ───────────────────────────────────────────────────
 
