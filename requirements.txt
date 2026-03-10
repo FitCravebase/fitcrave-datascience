@@ -28,3 +28,24 @@ pytz==2024.1 # Timezone handling
 thefuzz==0.22.1 # Fuzzy string matching for exercise resolution
 Levenshtein==0.25.0 # Fast backend for thefuzz
 google-api-python-client==2.131.0 # YouTube Data API client
+
+# Image Processing
+Pillow==11.1.0            # Pinned to 11.x; Pillow 12.x may have breaking API changes
+python-multipart==0.0.20
+
+# Scheduling
+apscheduler==3.11.0
+
+# HTTP Client
+httpx==0.28.1             # Bumped from 0.27.0; FastAPI/langchain-core require 0.28.x
+
+# Utilities
+python-jose[cryptography]==3.3.0
+passlib==1.7.4
+rapidfuzz==3.12.2
+
+# Development
+pytest==8.3.4             # Pinned; avoid pytest 9.x major bump
+pytest-asyncio==0.25.2    # CRITICAL PIN: 1.x has breaking asyncio_mode API changes
+black==24.10.0
+ruff==0.8.6
