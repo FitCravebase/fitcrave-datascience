@@ -62,10 +62,20 @@ async def process_new_plan(user_id: str, doc_dict: dict):
             allergies=[]
         )
         
-        # 3. Generate the plan using Gemini (with progressive overload weights)
+        # 2. Check for an existing plan to maintain program continuity
+        previous_plan_dict = None
+        existing_plan_ref = db.collection('users').document(user_id).collection('workout_plans').document('current_plan')
+        existing_plan_doc = existing_plan_ref.get()
+        if existing_plan_doc.exists:
+            previous_plan_dict = existing_plan_doc.to_dict()
+            print(f"🔄 Found existing plan for {user_id}. Enforcing Program Continuity.")
+        else:
+            print(f"🆕 No existing plan found for {user_id}. Generating a brand new Mesocycle.")
+
+        # 3. Generate the plan using Gemini (with progressive overload weights and continuity context)
         print(f"🧠 Prompting Gemini 2.0 to generate a specialized {user_profile.experience_level} {user_profile.goal} plan...")
         
-        plan = await generate_workout_plan(user_profile, db=db)
+        plan = await generate_workout_plan(user_profile, db=db, previous_plan_dict=previous_plan_dict)
         
         # 4. Save the generated plan back to Firestore!
         print(f"💾 Saving {plan.plan_name} to Firestore > users/{user_id}/workout_plans")

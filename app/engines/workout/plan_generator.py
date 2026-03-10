@@ -41,6 +41,8 @@ You MUST ONLY assign exercises that can be performed with the following availabl
 ## Weight / Loading Instructions
 {weight_instructions}
 
+{continuity_instructions}
+
 ## Instructions
 1. Recommend the optimal split (Full Body, Upper/Lower, PPL, or Custom) based on the user's goal, experience level, equipment, days per week, and session duration.
 2. For each day, select 4-6 highly effective exercises appropriate for the user's experience level and equipment.
@@ -78,6 +80,7 @@ Each exercise object contains:
 async def generate_workout_plan(
     user_context: Any,  # Expecting UserProfile
     db=None,            # Firestore AsyncClient — used for progressive overload lookup
+    previous_plan_dict: Optional[Dict] = None
 ) -> WorkoutPlan:
     """
     Generate a personalized workout plan using Gemini and structured outputs.
@@ -116,6 +119,26 @@ async def generate_workout_plan(
             f"For bodyweight exercises, set weight_kg to 0.0."
         )
 
+    continuity_instructions = ""
+    if previous_plan_dict:
+        # Simplify the previous plan to avoid token bloat and ensure focus
+        simple_sessions = []
+        for session in previous_plan_dict.get('sessions', []):
+            simple_ex = [{"exercise_name": e.get("exercise_name")} for e in session.get('exercises', [])]
+            simple_sessions.append({
+                "day": session.get("day"),
+                "focus_area": session.get("focus_area"),
+                "exercises": simple_ex
+            })
+            
+        continuity_instructions = (
+            "## PROGRAM CONTINUITY (CRITICAL)\n"
+            "You are advancing the user to the next week of their current mesocycle. "
+            "You MUST keep the exact same sessions and exercise selections as their previous plan below. "
+            "Your ONLY job is to update the target_sets, target_reps, target_rpe, and weight_kg based on the progressive overload data.\n"
+            f"PREVIOUS PLAN STRUCTURE:\n{json.dumps(simple_sessions, indent=2)}"
+        )
+        
     prompt = WORKOUT_PLAN_PROMPT.format(
         days_per_week=user_context.weekly_available_days,
         goal=user_context.goal,
@@ -126,6 +149,7 @@ async def generate_workout_plan(
         equipment=equipment_str,
         injuries=injuries_str,
         weight_instructions=weight_instructions,
+        continuity_instructions=continuity_instructions,
     )
 
     # Call Gemini JSON mode

@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from pydantic import BaseModel, Field
+from beanie import Document
 
 
 class WeightEntry(BaseModel):
@@ -30,8 +31,11 @@ class MacroTargetSnapshot(BaseModel):
     adjustment_reason: str = ""
 
 
-class UserProfile(BaseModel):
+class UserProfile(Document):
     """Complete user profile for AI decision-making."""
+
+    class Settings:
+        name = "users"
 
     # Identity (from existing User model)
     firebase_uid: str

@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.database import init_db
 
 
 @asynccontextmanager
@@ -20,7 +21,8 @@ async def lifespan(app: FastAPI):
     print(f"🚀 FitCrave AI Backend starting on {settings.APP_HOST}:{settings.APP_PORT}")
     print(f"📊 Environment: {settings.APP_ENV}")
 
-    # TODO: Initialize MongoDB connection via motor/beanie
+    # Initialize MongoDB connection via motor/beanie
+    await init_db()
     # TODO: Initialize Gemini LLM client
     # TODO: Initialize Firebase Admin SDK
     # TODO: Start APScheduler for coaching notifications

@@ -8,6 +8,7 @@ and validated before use.
 
 from typing import List, Optional
 from pydantic import BaseModel, Field
+from beanie import Document
 
 
 class Exercise(BaseModel):
@@ -15,6 +16,8 @@ class Exercise(BaseModel):
     Represents a single exercise definition from the database.
     Matches the schema of the downloaded `exercises.json` DB.
     """
+
+    id: str = Field(..., description="The unique string ID of the exercise in the JSON database")
     name: str = Field(..., description="The name of the exercise (e.g., 'Barbell Squat')")
     level: str = Field(..., description="Difficulty level (e.g., 'beginner')")
     mechanic: Optional[str] = Field(None, description="e.g., 'compound', 'isolation'")
@@ -61,11 +64,14 @@ class WorkoutSession(BaseModel):
     exercises: List[PlannedExercise] = Field(..., description="List of exercises in the session")
     estimated_duration_minutes: int = Field(..., description="Estimated time to complete session")
 
-class WorkoutPlan(BaseModel):
+class WorkoutPlan(Document):
     """
     Represents a full periodized workout plan (typically a week).
     This is what is stored in Firestore.
     """
+    class Settings:
+        name = "workout_plans"
+
     plan_name: str = Field(..., description="A catchy, descriptive name for the routine")
     goal: str = Field(..., description="The primary goal (e.g., 'Hypertrophy', 'Strength', 'Fat Loss')")
     sessions: List[WorkoutSession] = Field(..., description="The individual workout days")

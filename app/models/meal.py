@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
+from beanie import Document
 
 
 class MealItem(BaseModel):
@@ -24,8 +25,11 @@ class MealItem(BaseModel):
     source: Literal["manual", "mealsnap", "order", "plan"] = "manual"
 
 
-class MealLog(BaseModel):
+class MealLog(Document):
     """A logged meal."""
+
+    class Settings:
+        name = "meal_logs"
 
     user_id: str
     date: datetime
@@ -53,8 +57,11 @@ class MealLog(BaseModel):
         self.total_fat_g = sum(item.fat_g for item in self.items)
 
 
-class DailyMealPlan(BaseModel):
+class DailyMealPlan(Document):
     """An AI-generated daily meal plan."""
+
+    class Settings:
+        name = "daily_meal_plans"
 
     user_id: str
     date: datetime
