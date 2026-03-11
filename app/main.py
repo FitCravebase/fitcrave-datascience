@@ -1,19 +1,31 @@
-"""
-FitCrave AI Backend — Main Application Entry Point
-
-FastAPI server that exposes the AI orchestrator, nutrition engine,
-workout engine, and coaching engine as REST endpoints.
-"""
-
-from contextlib import asynccontextmanager
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import Optional, Dict, Any
+from contextlib import asynccontextmanager
 
-from app.config import settings
+from graph.graph_builder import graph
+from utils.logger import setup_logger
+
 from app.config import settings
 from app.database import connect_db, close_db
 
+logger = setup_logger(__name__)
+
+class ChatRequest(BaseModel):
+    latest_message: str
+    session_id: str
+    user_id: str
+    user_name: Optional[str] = None
+    location: Optional[str] = None
+
+class ChatResponse(BaseModel):
+    response: str
+    user_id: str
+    session_id: str
+    user_name: Optional[str] = None
+    location: Optional[str] = None
+    agent_data: Optional[Dict[str, Any]] = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -25,26 +37,17 @@ async def lifespan(app: FastAPI):
     # Initialize MongoDB
     await connect_db()
 
-    # Load IFCT food database into memory
-    from app.engines.nutrition.food_search import load_ifct_database
-    await load_ifct_database()
-
     yield
 
     # --- Shutdown ---
     print("🛑 FitCrave AI Backend shutting down...")
     await close_db()
 
-
 app = FastAPI(
-    title="FitCrave AI Backend",
-    description=(
-        "Decision-first AI health platform. "
-        "Nutrition Engine, Workout Engine, and Coaching Engine "
-        "powered by Google Gemini."
-    ),
-    version="0.1.0",
-    lifespan=lifespan,
+    title="Health and Fitness Chatbot API",
+    description="API for the Nutrition and Fitness AI Agent",
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # CORS — allow Flutter app to connect
@@ -56,7 +59,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 # ------------------------------------------------------------------
 # Health Check
 # ------------------------------------------------------------------
@@ -65,18 +67,60 @@ async def health_check():
     """Basic health check endpoint."""
     return {"status": "healthy", "service": "fitcrave-ai"}
 
+@app.get("/")
+def read_root():
+    return {"message": "Welcome to the Health and Fitness Chatbot API"}
 
-# ------------------------------------------------------------------
-# Route Registration
-# ------------------------------------------------------------------
-from app.engines.nutrition.router import router as nutrition_router  # noqa: E402
-
-app.include_router(nutrition_router, prefix="/api/v1/nutrition", tags=["Nutrition"])
-
-# from app.engines.workout.router import router as workout_router
-# from app.engines.coaching.router import router as coaching_router
-# from app.orchestrator.router import router as orchestrator_router
-
-# app.include_router(orchestrator_router, prefix="/api/v1/chat", tags=["Orchestrator"])
-# app.include_router(workout_router, prefix="/api/v1/workout", tags=["Workout"])
-# app.include_router(coaching_router, prefix="/api/v1/coaching", tags=["Coaching"])
+@app.post("/chat", response_model=ChatResponse)
+async def chat(request: ChatRequest):
+    logger.info(f"Received /chat request - Session: {request.session_id}, User: {request.user_id}")
+    logger.debug(f"Request payload: {request.model_dump()}")
+    
+    try:
+        # Invoke the LangGraph agent asynchronously to prevent CancelledError
+        result = await graph.ainvoke(
+            {
+                "messages": [("user", request.latest_message)],
+                "agent_data": {
+                    "session_id": request.session_id,
+                    "user_id": request.user_id,
+                    "user_name": request.user_name,
+                    "location": request.location
+                }
+            }, 
+            config={"configurable": {"thread_id": request.session_id, "user_id": request.user_id}}
+        )
+        
+        logger.debug(f"LangGraph computation complete. Final state: {result}")
+        
+        # Extract the last message safely
+        messages = result.get("messages", [])
+        if messages:
+            last_msg = messages[-1].content
+            if isinstance(last_msg, list):
+                response_text = " ".join([str(b.get("text", "")) for b in last_msg if isinstance(b, dict) and "text" in b])
+            else:
+                response_text = str(last_msg)
+        else:
+            response_text = "No response generated"
+            
+        agent_data = result.get("agent_data", {})
+        
+        logger.info(f"Successfully processed response for Session: {request.session_id}")
+        
+        return ChatResponse(
+            response=response_text,
+            user_id=request.user_id,
+            session_id=request.session_id,
+            user_name=request.user_name,
+            location=request.location,
+            agent_data=agent_data
+        )
+    except Exception as e:
+        logger.error(f"Exception during /chat: {e}", exc_info=True)
+        return ChatResponse(
+            response="An unexpected server error occurred while contacting the AI.",
+            user_id=request.user_id,
+            session_id=request.session_id,
+            agent_data={"error": str(e)}
+        )

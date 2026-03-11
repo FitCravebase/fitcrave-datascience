@@ -1,70 +1,31 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-*.egg
-*.egg-info/
-dist/
-build/
-eggs/
-*.manifest
-*.spec
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Virtual environments
-venv/
-.venv/
-ENV/
-env/
-
-# Environment variables
+# Environments
 .env
-.env.local
-.env.*.local
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# Jupyter
-.ipynb_checkpoints/
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-
-# Model files (large)
-*.h5
-*.pkl
-*.joblib
-*.pt
-*.pth
-*.onnx
-models/saved/
-
-# Data files
-data/raw/
-data/processed/
-*.csv
-*.json
-!app/engines/nutrition/data/ifct_foods.json
-!app/engines/workout/data/exercises.json
+.venv
+venv/
+ENV/
+env.bak/
+venv.bak/
 
 # Logs
 logs/
 *.log
 
-# Docker
-.dockerignore
+# Python Cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
