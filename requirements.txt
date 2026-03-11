@@ -1,40 +1,8 @@
-# Core Framework
-fastapi==0.115.6
-uvicorn[standard]==0.34.0
-pydantic==2.10.4
-pydantic-settings==2.7.1
-python-dotenv==1.0.1
-
-# AI / LLM
-google-genai==1.5.0
-langgraph==0.2.74
-langchain-core==0.3.34
-langchain-google-genai==2.0.14
-
-# Database
-motor==3.7.0
-pymongo==4.11.3
-beanie==1.27.0
-
-# Firebase (Auth verification + FCM)
-firebase-admin==6.6.0
-
-# Image Processing
-Pillow==11.1.0
-python-multipart==0.0.20
-
-# Scheduling
-apscheduler==3.11.0
-
-# HTTP Client (for external APIs)
-httpx==0.28.1
-
-# Utilities
-python-jose[cryptography]==3.3.0
-passlib==1.7.4
-
-# Development
-pytest==8.3.4
-pytest-asyncio==0.25.2
-black==24.10.0
-ruff==0.8.6
+fastapi
+uvicorn
+langgraph
+langchain
+pydantic
+python-dotenv
+pymongo
+langchain-google-genai
