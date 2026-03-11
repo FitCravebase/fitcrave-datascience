@@ -10,11 +10,15 @@ class ChatRequest(BaseModel):
     latest_message: str
     session_id: str
     user_id: str
+    user_name: Optional[str] = None
+    location: Optional[str] = None
 
 class ChatResponse(BaseModel):
     response: str
     user_id: str
     session_id: str
+    user_name: Optional[str] = None
+    location: Optional[str] = None
     agent_data: Optional[Dict[str, Any]] = None
 
 app = FastAPI(
@@ -40,6 +44,8 @@ async def chat(request: ChatRequest):
                 "agent_data": {
                     "session_id": request.session_id,
                     "user_id": request.user_id,
+                    "user_name": request.user_name,
+                    "location": request.location
                 }
             }, 
             config={"configurable": {"thread_id": request.session_id, "user_id": request.user_id}}
@@ -66,6 +72,8 @@ async def chat(request: ChatRequest):
             response=response_text,
             user_id=request.user_id,
             session_id=request.session_id,
+            user_name=request.user_name,
+            location=request.location,
             agent_data=agent_data
         )
     except Exception as e:

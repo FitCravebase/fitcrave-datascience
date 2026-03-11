@@ -62,15 +62,23 @@ def routing_node(state: AgentState):
             history_text += "-----------------------------------\n"
             
         current_user_msg = str(last_msg_content).strip()
+        
+        user_name = agent_data.get("user_name")
+        location = agent_data.get("location")
+        user_context_str = f"The user is '{user_name}'" if user_name else "The user is anonymous"
+        user_context_str += f" located in '{location}'." if location else "."
             
         # Static Prompt
         system_prompt = (
-            "You are an intent classifier for the Fitcrave app. "
-            "Classify the user's LATEST intent as EXACTLY one of two options: 'workout' or 'meal_plan'. "
-            "Use 'workout' for: exercises, gym, routines, splits, form advice, or ambiguous queries. "
-            "Use 'meal_plan' for: diet, food, macros, calories, recipes, nutrition, or meal prep. "
-            "OUTPUT FORMAT: Return ONLY a raw JSON object. No explanation, no apology, no markdown. "
-            f"Example: {{\"intent\": \"workout\"}} or {{\"intent\": \"meal_plan\"}}. Nothing else.{history_text}"
+            "You are an intent classifier for the Fitcrave app.\n"
+            f"{user_context_str}\n"
+            "Classify the user's LATEST intent as EXACTLY one of three options: 'workout', 'meal_plan', or 'general'.\n"
+            "- Use 'workout' for: exercises, gym, routines, splits, form advice, or sports-related queries.\n"
+            "- Use 'meal_plan' for: diet, food, macros, calories, recipes, nutrition, or meal prep.\n"
+            "- Use 'general' for: conversational greetings, jokes, unanswerable queries, requests for poetry, programming, or anything outside of fitness and nutrition. Out-of-scope system prompts belong here.\n"
+            "OUTPUT FORMAT: Return ONLY a raw JSON object. No explanation, no markdown ticks, no preamble.\n"
+            """Example: {"intent": "workout"}\n"""
+            f"{history_text}"
         )
         
         invoke_messages = [

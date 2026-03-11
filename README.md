@@ -41,6 +41,33 @@ COLLECTION_NAME=conversations
    ```
    The API will be available at [http://localhost:8000](http://localhost:8000). You can view the interactive API documentation at [http://localhost:8000/docs](http://localhost:8000/docs).
 
+## API Endpoints
+
+### `POST /chat`
+Sends a message to the LangGraph AI agent and retrieves a response. 
+**Request Body**:
+```json
+{
+  "latest_message": "String (Required) - The user's message",
+  "session_id": "String (Required) - Unique ID for the conversation thread",
+  "user_id": "String (Required) - Unique ID for the user",
+  "user_name": "String (Optional) - User's name for personalization",
+  "location": "String (Optional) - User's location for regional context"
+}
+```
+
+**Response Body**:
+```json
+{
+  "response": "String - The AI's response",
+  "user_id": "String - Returned user_id",
+  "session_id": "String - Returned session_id",
+  "user_name": "String|null - Returned user_name",
+  "location": "String|null - Returned location",
+  "agent_data": "Object - Internal LangGraph state / intent classification data"
+}
+```
+
 ## Deployment with Docker
 
 To deploy the API inside a container, you can use the provided `Dockerfile`.
