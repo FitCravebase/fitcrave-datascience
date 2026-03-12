@@ -35,9 +35,23 @@ def meal_plan_node(state: AgentState):
             
         user_name = agent_data.get("user_name")
         location = agent_data.get("location")
+        user_profile = agent_data.get("user_profile", {})
+        
         user_context_str = f" You are talking to {user_name}." if user_name else ""
         user_context_str += f" They are located in {location}; suggest foods and recipes based on regional availability/measurements where appropriate." if location else ""
-
+        
+        if user_profile:
+            user_context_str += f"\nUSER PROFILE DATA:\n"
+            if user_profile.get("age"): user_context_str += f"- Age: {user_profile.get('age')}\n"
+            if user_profile.get("gender"): user_context_str += f"- Gender: {user_profile.get('gender')}\n"
+            if user_profile.get("weight"): user_context_str += f"- Weight: {user_profile.get('weight')} kg\n"
+            if user_profile.get("height"): user_context_str += f"- Height: {user_profile.get('height')} cm\n"
+            if user_profile.get("smp_goal"): user_context_str += f"- Primary Goal: {user_profile.get('smp_goal')}\n"
+            if user_profile.get("activity_level"): user_context_str += f"- Activity Level: {user_profile.get('activity_level')}\n"
+            if user_profile.get("dietary_restrictions"): user_context_str += f"- Dietary Restrictions: {', '.join(user_profile.get('dietary_restrictions'))}\n"
+            if user_profile.get("allergies"): user_context_str += f"- Allergies: {', '.join(user_profile.get('allergies'))}\n"
+            if user_profile.get("meal_count_per_day"): user_context_str += f"- Meals Per Day: {user_profile.get('meal_count_per_day')}\n"
+        
         # Static Prompt
         system_prompt = (
             f"You are a specialized Nutritionist for the Fitcrave app.{user_context_str}\n"
