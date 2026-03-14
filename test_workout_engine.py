@@ -5,7 +5,7 @@ from datetime import datetime
 from app.engines.workout.exercise_db import exercise_db
 from app.engines.workout.plan_generator import generate_workout_plan
 from app.engines.workout.progressive_overload import check_progression
-from app.models.workout import WorkoutSet
+from app.models.workout import WorkoutPlan
 
 async def run_demo():
     print("=========================================")
@@ -23,24 +23,43 @@ async def run_demo():
 
     # 2. Test Plan Generation
     print("[2] Generating a Workout Plan (via Mock LLM)...")
-    user_context = {
-        "days_per_week": 3,
-        "goal": "Build muscle",
-        "experience_level": "intermediate",
-        "equipment": ["barbell", "dumbbells", "bench"]
-    }
-    print(f"User context passed: {json.dumps(user_context)}")
+    class MockUserContext:
+        def __init__(self):
+            self.weekly_available_days = 3
+            self.goal = "Build muscle"
+            self.experience_level = "intermediate"
+            self.equipment = ["barbell", "dumbbells", "bench"]
+            self.injuries = ["None"]
+            self.target_timeline = "3 months"
+            self.session_duration_minutes = 45
+
+    user_context = MockUserContext()
+    print(f"User context passed: {vars(user_context)}")
     
-    # Pass 50 filtered exercises to simulate LLM context window limits
-    allowed_exercises = exercise_db.filter_exercises(limit=50)
+    import time
+    start_time = time.time()
     
-    plan = await generate_workout_plan(user_context, allowed_exercises)
+    plan = await generate_workout_plan(user_context)
     
-    print("\n[Generated Plan Pydantic Object]")
-    print(f"Plan Name: {plan.plan_name}")
-    print(f"Goal: {plan.goal}")
-    print(f"Weekly Notes: {plan.weekly_notes}")
-    print("\n-----------------------------------------\n")
+    end_time = time.time()
+    print(f"\n[Generation Time]: {end_time - start_time:.2f} seconds")
+    
+    with open("test_logs.txt", "w", encoding="utf-8") as f:
+        f.write("\n[Generated Plan JSON Schema Check]\n")
+        f.write(f"Generation Time: {end_time - start_time:.2f} seconds\n")
+        f.write(f"Plan Name: {plan.plan_name}\n")
+        f.write(f"Goal: {plan.goal}\n")
+        f.write(f"Weekly Notes: {plan.weekly_notes}\n")
+        
+        # Print the First Session's First Exercise Sets to prove they auto-expanded
+        if plan.sessions and plan.sessions[0].exercises:
+            first_ex = plan.sessions[0].exercises[0]
+            f.write(f"\nExample Exercise Generated: {first_ex.exercise_name}\n")
+            f.write(f"LLM generated target_sets/target_reps natively.\n")
+            f.write(f"Expanded to {len(first_ex.sets)} WorkoutSets under the hood:\n")
+            for w_set in first_ex.sets:
+                f.write(f"  - Set {w_set.set_number}: {w_set.target_reps} reps (Rest: {w_set.rest_seconds}s)\n")
+        f.write("\n-----------------------------------------\n")
 
     # 3. Test Progressive Overload
     print("[3] Testing Progressive Overload Logic...")

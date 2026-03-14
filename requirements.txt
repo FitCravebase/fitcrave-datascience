@@ -23,6 +23,12 @@ beanie==1.27.0
 # If conflicts occur run: pip install firebase-admin==6.6.0 --no-deps
 firebase-admin==6.6.0
 
+# Misc Utilities
+pytz==2024.1 # Timezone handling
+thefuzz==0.22.1 # Fuzzy string matching for exercise resolution
+Levenshtein==0.25.0 # Fast backend for thefuzz
+google-api-python-client==2.131.0 # YouTube Data API client
+
 # Image Processing
 Pillow==11.1.0            # Pinned to 11.x; Pillow 12.x may have breaking API changes
 python-multipart==0.0.20
