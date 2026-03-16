@@ -1,0 +1,7 @@
+# .env
+# .git
+# .gitignore
+# myenv/
+# __pycache__/
+# *.pyc
+# .pytest_cache/
