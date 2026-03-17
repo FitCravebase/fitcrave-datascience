@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from beanie import Document
 from pydantic import BaseModel, Field
 
 
@@ -30,8 +31,11 @@ class MacroTargetSnapshot(BaseModel):
     adjustment_reason: str = ""
 
 
-class UserProfile(BaseModel):
+class UserProfile(Document):
     """Complete user profile for AI decision-making."""
+
+    class Settings:
+        name = "users"
 
     # Identity (from existing User model)
     firebase_uid: str
@@ -56,8 +60,12 @@ class UserProfile(BaseModel):
     allergies: list[str] = Field(default_factory=list)
     disliked_foods: list[str] = Field(default_factory=list)
 
-    # Equipment
+    # Equipment & Injury Constraints
     equipment: list[str] = Field(default_factory=list)
+    injuries: list[str] = Field(default_factory=list)
+
+    # Goals
+    target_timeline: str | None = None  # e.g. "lose 5kg in 3 months"
 
     # Schedule
     weekly_available_days: int = 5
