@@ -43,8 +43,7 @@ async def lifespan(app: FastAPI):
     host = os.getenv("APP_HOST", "0.0.0.0")
     port = os.getenv("APP_PORT", "8080")
     env = os.getenv("APP_ENV", "development")
-    print(f"🚀 FitCrave AI Backend starting on {host}:{port}")
-    print(f"📊 Environment: {env}")
+    logger.info("FitCrave AI Backend starting on %s:%s [%s]", host, port, env)
 
     # Connect Motor client and ping MongoDB
     await connect_db()
@@ -54,12 +53,12 @@ async def lifespan(app: FastAPI):
         database=get_db(),
         document_models=[UserProfile, WorkoutPlan],
     )
-    logger.info("✅ Beanie ODM initialised")
+    logger.info("Beanie ODM initialised")
 
     yield
 
     await close_db()
-    print("🛑 FitCrave AI Backend shutting down...")
+    logger.info("FitCrave AI Backend shutting down...")
 
 
 app = FastAPI(
