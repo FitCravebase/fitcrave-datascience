@@ -3,7 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 from contextlib import asynccontextmanager
-
+from app.engines.nutrition.router import router as nutrition_router
+from app.engines.workout.router import router as workout_router
 from graph.graph_builder import graph
 from utils.logger import setup_logger
 
@@ -63,6 +64,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(nutrition_router, prefix="/api/v1/nutrition")
+app.include_router(workout_router, prefix="/api/v1/workout")
 # ------------------------------------------------------------------
 # Health Check
 # ------------------------------------------------------------------

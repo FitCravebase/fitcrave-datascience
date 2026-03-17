@@ -10,16 +10,37 @@ from app.models.user import UserProfile
 from app.engines.workout.plan_generator import generate_workout_plan
 from app.engines.workout.exercise_db import exercise_db
 
-# Initialize Firebase (Ensure FIREBASE_CREDENTIALS_PATH points to a valid service account JSON locally)
+# DEPRECATED:
+# This Firestore-based listener previously generated SWP workout plans
+# when `requires_new_plan == True` on user documents. The new design
+# uses the HTTP-queued endpoint `/api/v1/workout/plan/request` in
+# `app.engines.workout.router`, so this module is kept only for
+# reference and can be removed after full migration.
+
+# Initialize Firebase
+# - In local/dev: use FIREBASE_CREDENTIALS_PATH for a service account JSON.
+# - In production on GCP (Cloud Run, GCE, etc.): rely on Application Default Credentials.
 db = None
 if not firebase_admin._apps:
     try:
-        cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH)
+        cred_path = getattr(settings, "FIREBASE_CREDENTIALS_PATH", None)
+        if cred_path:
+            cred = credentials.Certificate(cred_path)
+            print(f"✅ Firebase Admin initialized using explicit credentials at '{cred_path}'.")
+        else:
+            cred = credentials.ApplicationDefault()
+            print("✅ Firebase Admin initialized using Application Default Credentials.")
+
         firebase_admin.initialize_app(cred)
-        print("✅ Firebase Admin initialized.")
         db = firestore.client()
     except Exception as e:
-        print(f"⚠️ Could not initialize Firebase Admin: {e}\nEnsure '{settings.FIREBASE_CREDENTIALS_PATH}' exists and is valid.")
+        detail_path = getattr(settings, "FIREBASE_CREDENTIALS_PATH", None)
+        print(
+            f"⚠️ Could not initialize Firebase Admin: {e}\n"
+            f"Checked FIREBASE_CREDENTIALS_PATH='{detail_path}'. "
+            "In production, ensure the Cloud Run service account has Firestore access; "
+            "in local dev, set FIREBASE_CREDENTIALS_PATH to a valid service account JSON."
+        )
         print("Exiting listener.")
         exit(1)
 
