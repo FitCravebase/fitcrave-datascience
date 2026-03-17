@@ -1,20 +1,23 @@
+from contextlib import asynccontextmanager
+from typing import Any, Dict, Optional
+
+import os
+
+from beanie import init_beanie
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
-from contextlib import asynccontextmanager
+
+from app.database import connect_db, close_db, get_db
+from app.models.user import UserProfile
+from app.models.workout import WorkoutPlan
 from app.engines.nutrition.router import router as nutrition_router
 from app.engines.workout.router import router as workout_router
 from graph.graph_builder import graph
 from utils.logger import setup_logger
 
-import os
-from app.database import connect_db, close_db
-
-# Import nutrition API router
-from app.engines.nutrition.router import router as nutrition_router
-
 logger = setup_logger(__name__)
+
 
 class ChatRequest(BaseModel):
     latest_message: str
@@ -24,6 +27,7 @@ class ChatRequest(BaseModel):
     location: Optional[str] = None
     user_profile: Optional[Dict[str, Any]] = None
 
+
 class ChatResponse(BaseModel):
     response: str
     user_id: str
@@ -32,30 +36,37 @@ class ChatResponse(BaseModel):
     location: Optional[str] = None
     agent_data: Optional[Dict[str, Any]] = None
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application startup and shutdown events."""
-    # --- Startup ---
     host = os.getenv("APP_HOST", "0.0.0.0")
-    port = os.getenv("APP_PORT", "8000")
+    port = os.getenv("APP_PORT", "8080")
     env = os.getenv("APP_ENV", "development")
     print(f"🚀 FitCrave AI Backend starting on {host}:{port}")
     print(f"📊 Environment: {env}")
 
-    # Initialize MongoDB (async)
+    # Connect Motor client and ping MongoDB
     await connect_db()
+
+    # Initialise Beanie ODM with all Document models
+    await init_beanie(
+        database=get_db(),
+        document_models=[UserProfile, WorkoutPlan],
+    )
+    logger.info("✅ Beanie ODM initialised")
 
     yield
 
-    # --- Shutdown ---
     await close_db()
     print("🛑 FitCrave AI Backend shutting down...")
 
+
 app = FastAPI(
-    title="Health and Fitness Chatbot API",
+    title="FitCrave AI Backend",
     description="API for the Nutrition and Fitness AI Agent",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # CORS — allow Flutter app to connect
@@ -68,76 +79,66 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(nutrition_router, prefix="/api/v1/nutrition")
-app.include_router(workout_router, prefix="/api/v1/workout")
-# ------------------------------------------------------------------
-# Register Nutrition API routes at /api/v1/nutrition
-# ------------------------------------------------------------------
 app.include_router(nutrition_router, prefix="/api/v1/nutrition", tags=["Nutrition"])
-
-# ------------------------------------------------------------------
-# Register Workout API routes at /api/v1/workout
-# ------------------------------------------------------------------
-from app.engines.workout.router import router as workout_router
 app.include_router(workout_router, prefix="/api/v1/workout", tags=["Workout"])
 
-# ------------------------------------------------------------------
-# Health Check
-# ------------------------------------------------------------------
+
 @app.get("/health", tags=["System"])
 async def health_check():
     """Basic health check endpoint."""
     return {"status": "healthy", "service": "fitcrave-ai"}
 
+
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to the Health and Fitness Chatbot API"}
+    return {"message": "Welcome to the FitCrave AI Backend"}
+
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     logger.info(f"Received /chat request - Session: {request.session_id}, User: {request.user_id}")
     logger.debug(f"Request payload: {request.model_dump()}")
-    
+
     try:
-        # Invoke the LangGraph agent asynchronously to prevent CancelledError
         result = await graph.ainvoke(
             {
-            "messages": [("user", request.latest_message)],
-            "agent_data": {
-                "session_id": request.session_id,
-                "user_id": request.user_id,
-                "user_name": request.user_name,
-                "location": request.location,
-                "user_profile": request.user_profile
-            }
-            }, 
-            config={"configurable": {"thread_id": request.session_id, "user_id": request.user_id}}
+                "messages": [("user", request.latest_message)],
+                "agent_data": {
+                    "session_id": request.session_id,
+                    "user_id": request.user_id,
+                    "user_name": request.user_name,
+                    "location": request.location,
+                    "user_profile": request.user_profile,
+                },
+            },
+            config={"configurable": {"thread_id": request.session_id, "user_id": request.user_id}},
         )
-        
+
         logger.debug(f"LangGraph computation complete. Final state: {result}")
-        
-        # Extract the last message safely
+
         messages = result.get("messages", [])
         if messages:
             last_msg = messages[-1].content
             if isinstance(last_msg, list):
-                response_text = " ".join([str(b.get("text", "")) for b in last_msg if isinstance(b, dict) and "text" in b])
+                response_text = " ".join(
+                    [str(b.get("text", "")) for b in last_msg if isinstance(b, dict) and "text" in b]
+                )
             else:
                 response_text = str(last_msg)
         else:
             response_text = "No response generated"
-            
+
         agent_data = result.get("agent_data", {})
-        
+
         logger.info(f"Successfully processed response for Session: {request.session_id}")
-        
+
         return ChatResponse(
             response=response_text,
             user_id=request.user_id,
             session_id=request.session_id,
             user_name=request.user_name,
             location=request.location,
-            agent_data=agent_data
+            agent_data=agent_data,
         )
     except Exception as e:
         logger.error(f"Exception during /chat: {e}", exc_info=True)
@@ -145,6 +146,5 @@ async def chat(request: ChatRequest):
             response="An unexpected server error occurred while contacting the AI.",
             user_id=request.user_id,
             session_id=request.session_id,
-            agent_data={"error": str(e)}
+            agent_data={"error": str(e)},
         )
-
