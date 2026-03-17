@@ -38,7 +38,7 @@ def _get_client() -> genai.Client:
     if not api_key.strip():
         raise ValueError(
             "GEMINI_API_KEY is missing. Set it as an environment variable in Cloud Run "
-            "or provide it in app/config.py."
+            "or provide it in your .env file."
         )
 
     _client = genai.Client(api_key=api_key)
@@ -57,7 +57,6 @@ class GeminiClient:
     @staticmethod
     def _extract_json(text: str) -> dict[str, Any]:
         """Strip markdown fences and parse the first JSON object/array."""
-        # Remove ```json … ``` wrappers
         cleaned = re.sub(r"```(?:json)?\s*", "", text).strip()
         cleaned = cleaned.rstrip("`").strip()
         return json.loads(cleaned)
@@ -120,4 +119,3 @@ class GeminiClient:
 
 # Singleton instance used across the app
 gemini_client = GeminiClient()
-

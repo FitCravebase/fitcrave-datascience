@@ -81,9 +81,7 @@ class WorkoutPlanStatus(BaseModel):
 async def _generate_and_save_plan(user_id: str) -> None:
     """
     Background task that generates a workout plan and saves it to Firestore.
-
-    Mirrors the logic from `process_new_plan` in `firestore_listener.py`,
-    but is triggered via HTTP instead of a snapshot listener.
+    Triggered via HTTP instead of a snapshot listener.
     """
     db = get_db()
 
@@ -162,7 +160,6 @@ async def _generate_and_save_plan(user_id: str) -> None:
                 }
             )
         except Exception:
-            # Avoid crashing the worker due to update errors
             logger.exception("Failed to update plan_status after error for %s", user_id)
 
 
@@ -176,7 +173,7 @@ async def request_workout_plan(
     """
     Queue a new workout plan generation for the given user.
 
-    This endpoint returns quickly with status=queued while the actual Gemini
+    Returns immediately with status=queued while the actual Gemini
     call + Firestore writes happen in a background task.
     """
     if not req.user_id.strip():
@@ -190,7 +187,6 @@ async def request_workout_plan(
             detail=f"No Firestore user document found for id={req.user_id}",
         )
 
-    # Mark as queued so the app can show a generating state even before plan exists.
     db.collection("users").document(req.user_id).update(
         {
             "requires_new_plan": True,
@@ -204,4 +200,3 @@ async def request_workout_plan(
         status="queued",
         message="Workout plan generation has been queued.",
     )
-

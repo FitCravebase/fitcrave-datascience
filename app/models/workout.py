@@ -8,6 +8,7 @@ and validated before use.
 
 from typing import List, Optional
 from pydantic import BaseModel, Field
+from beanie import Document
 
 
 class Exercise(BaseModel):
@@ -15,6 +16,8 @@ class Exercise(BaseModel):
     Represents a single exercise definition from the database.
     Matches the schema of the downloaded `exercises.json` DB.
     """
+
+    id: str = Field(..., description="The unique string ID of the exercise in the JSON database")
     name: str = Field(..., description="The name of the exercise (e.g., 'Barbell Squat')")
     level: str = Field(..., description="Difficulty level (e.g., 'beginner')")
     mechanic: Optional[str] = Field(None, description="e.g., 'compound', 'isolation'")
@@ -24,6 +27,7 @@ class Exercise(BaseModel):
     secondaryMuscles: List[str] = Field(default_factory=list, description="Other muscles worked")
     instructions: List[str] = Field(default_factory=list, description="Step-by-step instructions")
     category: str = Field(..., description="e.g., 'strength', 'stretching'")
+    video_id: Optional[str] = Field(None, description="YouTube Video ID")
 
 
 class WorkoutSet(BaseModel):
@@ -46,6 +50,8 @@ class PlannedExercise(BaseModel):
     exercise_name: str = Field(..., description="The name of the exercise to perform")
     sets: List[WorkoutSet] = Field(..., description="The planned sets for this exercise")
     notes: Optional[str] = Field(None, description="Any specific form cues or LLM coaching notes")
+    video_id: Optional[str] = Field(None, description="Direct YouTube Video ID if available")
+    youtube_search_url: Optional[str] = Field(None, description="Fallback URL to search YouTube if video_id is missing")
 
 
 class WorkoutSession(BaseModel):
@@ -58,13 +64,79 @@ class WorkoutSession(BaseModel):
     estimated_duration_minutes: int = Field(..., description="Estimated time to complete session")
 
 
-class WorkoutPlan(BaseModel):
+class WorkoutPlan(Document):
     """
     Represents a full periodized workout plan (typically a week).
-    This is what the LLM will output.
+    This is what is stored in MongoDB via Beanie.
     """
+    class Settings:
+        name = "workout_plans"
+
     plan_name: str = Field(..., description="A catchy, descriptive name for the routine")
     goal: str = Field(..., description="The primary goal (e.g., 'Hypertrophy', 'Strength', 'Fat Loss')")
     sessions: List[WorkoutSession] = Field(..., description="The individual workout days")
     weekly_notes: str = Field(..., description="High-level coaching advice for the week")
 
+
+# -----------------------------------------------------------------------------
+# LLM Generation Schemas
+# -----------------------------------------------------------------------------
+# These strictly decoupled schemas force the LLM to output lightweight JSON
+# without generating nested sets arrays, ensuring generation under 10 seconds.
+# -----------------------------------------------------------------------------
+
+class LLMPlannedExercise(BaseModel):
+    exercise_name: str = Field(..., description="Name of the exercise")
+    target_sets: int = Field(..., description="Number of sets")
+    target_reps: int = Field(..., description="Target reps per set")
+    rest_seconds: int = Field(90, description="Rest period in seconds")
+    weight_kg: float = Field(0.0, description="Suggested starting weight in kg. Use 0.0 for bodyweight exercises.")
+    target_rpe: Optional[float] = Field(None, description="Target RPE (1-10). E.g. 7.0 means 3 reps left in the tank.")
+    notes: Optional[str] = Field(None, description="Specific form cues or notes")
+
+    def to_firestore_model(self) -> PlannedExercise:
+        sets = [
+            WorkoutSet(
+                set_number=i + 1,
+                target_reps=self.target_reps,
+                rest_seconds=self.rest_seconds,
+                weight_kg=self.weight_kg,
+                target_rpe=self.target_rpe,
+            )
+            for i in range(self.target_sets)
+        ]
+        return PlannedExercise(
+            exercise_name=self.exercise_name,
+            sets=sets,
+            notes=self.notes
+        )
+
+
+class LLMWorkoutSession(BaseModel):
+    day: str = Field(..., description="Day of the plan (e.g., 'Day 1')")
+    focus_area: str = Field(..., description="Main focus")
+    exercises: List[LLMPlannedExercise] = Field(..., description="List of structured exercises")
+    estimated_duration_minutes: int = Field(..., description="Estimated time")
+
+    def to_firestore_model(self) -> WorkoutSession:
+        return WorkoutSession(
+            day=self.day,
+            focus_area=self.focus_area,
+            estimated_duration_minutes=self.estimated_duration_minutes,
+            exercises=[e.to_firestore_model() for e in self.exercises]
+        )
+
+
+class LLMWorkoutPlan(BaseModel):
+    plan_name: str = Field(..., description="A catchy name for the routine")
+    goal: str = Field(..., description="The primary goal")
+    sessions: List[LLMWorkoutSession] = Field(..., description="The individual workout days")
+    weekly_notes: str = Field(..., description="High-level coaching advice")
+
+    def to_firestore_model(self) -> WorkoutPlan:
+        return WorkoutPlan(
+            plan_name=self.plan_name,
+            goal=self.goal,
+            weekly_notes=self.weekly_notes,
+            sessions=[s.to_firestore_model() for s in self.sessions]
+        )

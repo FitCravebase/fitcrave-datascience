@@ -1,141 +1,189 @@
 """
 Workout Plan Generator
 
-Uses Gemini to generate periodized workout plans based on the user's
-goal, experience level, available equipment, injuries, and schedule.
+Uses Gemini to generate periodized workout plans based on user's
+goal, experience level, available equipment, and recovery status.
 """
 
+import json
 import logging
-from typing import Any
+from typing import Any, Dict, List, Optional
+from urllib.parse import quote_plus
+from thefuzz import process, fuzz
 
-from app.models.user import UserProfile
-from app.models.workout import WorkoutPlan
-from app.utils.llm_client import gemini_client
+from app.models.workout import WorkoutPlan, LLMWorkoutPlan
+from app.engines.workout.exercise_db import exercise_db
+from app.engines.workout.progressive_overload_calculator import (
+    get_starting_weight, compute_overload_weights
+)
 from app.utils.prompts import FITCRAVE_SYSTEM_INSTRUCTION
+from app.utils.llm_client import gemini_client
 
 logger = logging.getLogger(__name__)
 
 WORKOUT_PLAN_PROMPT = """You are FitCrave's AI Personal Trainer.
-Generate a personalized {days_per_week}-day weekly workout plan for the user below.
+Generate a personalized {days_per_week}-day weekly workout plan.
 
 ## User Profile
-Name: {name}
 Goal: {goal}
+Target Timeline: {target_timeline}
 Experience level: {experience_level}
+Body Weight: {body_weight_kg} kg
 Session Target Duration: {session_duration} mins
-Weekly Available Days: {days_per_week}
-Equipment: {equipment}
-Injuries / Limitations: {injuries}
+
+## Medical/Injury Constraints
+Injuries to avoid straining: {injuries}
+
+## Equipment Constraint
+You MUST ONLY assign exercises that can be performed with the following available equipment:
+{equipment}
+
+## Weight / Loading Instructions
+{weight_instructions}
+
+{continuity_instructions}
 
 ## Instructions
-1. Choose safe, appropriate exercises based on the user's goal, experience, equipment, and injuries.
-2. Design a {split_type} split for the week.
-3. For each day, define 4–6 exercises with sets, reps, target RPE, and rest times.
-4. Keep total session duration close to the target.
-5. Provide concise weekly coaching notes.
+1. Recommend the optimal split (Full Body, Upper/Lower, PPL, or Custom) based on the user's goal, experience level, equipment, days per week, and session duration.
+2. For each day, select 4-6 highly effective exercises appropriate for the user's experience level and equipment.
+3. DO NOT assign any exercises that strain the user's listed injuries!
+4. Ensure the total workout duration stays near the target duration of {session_duration} minutes.
+5. Specify target reps, sets, RPE (Rate of Perceived Exertion), rest times, and a starting weight for EVERY exercise.
+6. For bodyweight exercises (push-ups, pull-ups, planks, etc.) set weight_kg to 0.0.
+7. Provide high-level weekly coaching notes.
 
-You MUST respond with a single JSON object matching this schema:
-{{
-  "plan_name": "string",
-  "goal": "string",
-  "sessions": [
-    {{
-      "day": "string",
-      "focus_area": "string",
-      "estimated_duration_minutes": 0,
-      "exercises": [
-        {{
-          "exercise_name": "string",
-          "notes": "string",
-          "sets": [
-            {{
-              "set_number": 1,
-              "target_reps": 8,
-              "target_rpe": 7.5,
-              "weight_kg": 0,
-              "rest_seconds": 90
-            }}
-          ]
-        }}
-      ]
-    }}
-  ],
-  "weekly_notes": "string"
-}}
-Do NOT include any text outside this JSON.
+You must respond STRICTLY fulfilling the provided JSON schema. Ensure your response is valid JSON matching the exact schema definition.
+
+Output Schema Details:
+A JSON object with:
+- plan_name: string
+- goal: string
+- weekly_notes: string
+- sessions: list of session objects
+
+Each session object contains:
+- day: string ("Day 1", etc)
+- focus_area: string
+- estimated_duration_minutes: int
+- exercises: list of exercise objects
+
+Each exercise object contains:
+- exercise_name: string
+- target_sets: int (e.g., 4)
+- target_reps: int (e.g., 10)
+- rest_seconds: int (e.g., 90)
+- weight_kg: float (e.g., 60.0 — suggested working weight in kg; 0.0 for bodyweight)
+- target_rpe: float (e.g., 7.5 — target exertion on a 1-10 scale; 7=3 reps left, 8=2 reps left, 9=1 rep left)
+- notes: string or null
 """
 
-
-def suggest_split_type(days_per_week: int, experience_level: str) -> str:
-    """Suggest the best training split based on user parameters."""
-    if experience_level.lower() == "beginner":
-        return "Full Body"
-    if days_per_week <= 3:
-        return "Full Body"
-    if days_per_week == 4:
-        return "Upper/Lower"
-    return "Push/Pull/Legs"
-
-
 async def generate_workout_plan(
-    user_profile: UserProfile,
-    db: Any | None = None,
-    previous_plan_dict: dict[str, Any] | None = None,
+    user_context: Any,  # Expecting UserProfile
+    db=None,            # Firestore AsyncClient — used for progressive overload lookup
+    previous_plan_dict: Optional[Dict] = None
 ) -> WorkoutPlan:
     """
     Generate a personalized workout plan using Gemini and structured outputs.
-
-    This function is called by the Firestore listener when `requires_new_plan` is true.
+    Prescribes weights using:
+      - Progressive overload history (if workout_logs exist)
+      - ExRx.net population-based strength standards (first plan)
     """
-    days_per_week = int(user_profile.weekly_available_days or 3)
-    session_minutes = int(user_profile.session_duration_minutes or 45)
-    experience_level = (user_profile.experience_level or "beginner").lower()
-    goal = user_profile.goal or "General Fitness"
+    equipment_str = ", ".join(user_context.equipment) if user_context.equipment else "body weight only"
+    injuries_str  = ", ".join(getattr(user_context, "injuries", [])) or "None"
+    target_timeline_str = getattr(user_context, "target_timeline", None) or "No specific timeline"
+    body_weight_kg = getattr(user_context, 'weight_kg', 70.0)
+    experience_level = user_context.experience_level
 
-    equipment_str = ", ".join(user_profile.equipment) if user_profile.equipment else "bodyweight only"
-    injuries_str = ", ".join(getattr(user_profile, "injuries", [])) or "none reported"
-
-    split_type = suggest_split_type(days_per_week, experience_level)
-
-    # Build continuity hint (if a previous plan exists)
-    continuity_hint = ""
-    if previous_plan_dict:
+    # ── Weight context for the prompt ─────────────────────────────────────
+    overload_weights: Dict[str, float] = {}
+    if db and hasattr(user_context, 'firebase_uid'):
         try:
-            prev_name = previous_plan_dict.get("plan_name", "previous block")
-            continuity_hint = (
-                f"\n\n## Program Continuity\n"
-                f"The user previously followed a plan called '{prev_name}'. "
-                f"Preserve overall structure but progress volume or load where appropriate."
-            )
-        except Exception:
-            continuity_hint = ""
+            overload_weights = compute_overload_weights(user_context.firebase_uid, db)
+        except Exception as e:
+            logger.warning(f"Could not compute overload weights: {e}")
+
+    if overload_weights:
+        lines = [f"  - {name}: {kg} kg" for name, kg in overload_weights.items()]
+        weight_instructions = (
+            "The user has previous workout data. Use these EXACT weights from their last session "
+            "(already adjusted for progressive overload). If an exercise is not listed below, "
+            "prescribe a sensible weight based on the user's bodyweight and experience:\n"
+            + "\n".join(lines)
+        )
+    else:
+        weight_instructions = (
+            f"This is likely the user's FIRST plan. Prescribe conservative starting weights "
+            f"using population-based strength standards (ExRx.net). "
+            f"User bodyweight is {body_weight_kg} kg, experience level is {experience_level}. "
+            f"For beginners, target roughly 40-60% of estimated 1RM. "
+            f"For bodyweight exercises, set weight_kg to 0.0."
+        )
+
+    continuity_instructions = ""
+    if previous_plan_dict:
+        simple_sessions = []
+        for session in previous_plan_dict.get('sessions', []):
+            simple_ex = [{"exercise_name": e.get("exercise_name")} for e in session.get('exercises', [])]
+            simple_sessions.append({
+                "day": session.get("day"),
+                "focus_area": session.get("focus_area"),
+                "exercises": simple_ex
+            })
+
+        continuity_instructions = (
+            "## PROGRAM CONTINUITY (CRITICAL)\n"
+            "You are advancing the user to the next week of their current mesocycle. "
+            "You MUST keep the exact same sessions and exercise selections as their previous plan below. "
+            "Your ONLY job is to update the target_sets, target_reps, target_rpe, and weight_kg based on the progressive overload data.\n"
+            f"PREVIOUS PLAN STRUCTURE:\n{json.dumps(simple_sessions, indent=2)}"
+        )
 
     prompt = WORKOUT_PLAN_PROMPT.format(
-        days_per_week=days_per_week,
-        name=user_profile.name,
-        goal=goal,
+        days_per_week=user_context.weekly_available_days,
+        goal=user_context.goal,
+        target_timeline=target_timeline_str,
         experience_level=experience_level,
-        session_duration=session_minutes,
+        body_weight_kg=body_weight_kg,
+        session_duration=user_context.session_duration_minutes,
         equipment=equipment_str,
         injuries=injuries_str,
-        split_type=split_type,
-    ) + continuity_hint
+        weight_instructions=weight_instructions,
+        continuity_instructions=continuity_instructions,
+    )
 
-    try:
-        raw_json = await gemini_client.generate_json(
-            prompt=prompt,
-            system_instruction=FITCRAVE_SYSTEM_INSTRUCTION,
-            temperature=0.4,
-        )
-        plan = WorkoutPlan(**raw_json)
-        return plan
-    except Exception as e:
-        logger.error("Error generating workout plan via Gemini: %s", e, exc_info=True)
-        # Fallback: minimal safe plan so the listener doesn't crash
-        return WorkoutPlan(
-            plan_name=f"{goal} – Simple Starter Plan",
-            goal=goal,
-            sessions=[],
-            weekly_notes="We encountered an error generating a detailed plan. Please try again later.",
-        )
+    raw_json_dict = await gemini_client.generate_json(
+        prompt=prompt,
+        system_instruction=FITCRAVE_SYSTEM_INSTRUCTION,
+        temperature=0.2
+    )
 
+    llm_plan = LLMWorkoutPlan.model_validate(raw_json_dict)
+    plan = llm_plan.to_firestore_model()
+
+    # Fuzzy match exercise names against the local DB; attach video IDs where available
+    allowed_names = {ex.name: ex for ex in exercise_db.exercises}
+    allowed_name_list = list(allowed_names.keys())
+
+    for session in plan.sessions:
+        for p_ex in session.exercises:
+            best_match, score = process.extractOne(
+                p_ex.exercise_name,
+                allowed_name_list,
+                scorer=fuzz.token_sort_ratio
+            )
+
+            if score >= 85:
+                matched_db_ex = allowed_names[best_match]
+                p_ex.exercise_name = matched_db_ex.name
+                p_ex.video_id = matched_db_ex.video_id
+            else:
+                query = quote_plus(f"How to do {p_ex.exercise_name} exercise proper form tutorial")
+                p_ex.youtube_search_url = f"https://www.youtube.com/results?search_query={query}"
+                p_ex.video_id = None
+
+                logger.warning(
+                    f"Exercise '{p_ex.exercise_name}' not found locally "
+                    f"(Best match: {best_match} @ {score}%). Generated fallback URL."
+                )
+
+    return plan

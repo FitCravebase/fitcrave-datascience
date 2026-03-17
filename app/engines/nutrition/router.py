@@ -110,10 +110,10 @@ async def calculate_targets(req: CalculateTargetsRequest):
             "explanation": targets.explanation,
         }
         await users_collection().update_one(
-            {"firebase_uid": req.user_id},
+            {"firebaseUid": req.user_id},
             {
                 "$set": {
-                    "firebase_uid": req.user_id,
+                    "firebaseUid": req.user_id,
                     "weight_kg": req.weight_kg,
                     "height_cm": req.height_cm,
                     "age": req.age,
@@ -137,7 +137,7 @@ async def calculate_targets(req: CalculateTargetsRequest):
 async def get_user_targets(user_id: str):
     """Get the user's current cached macro targets."""
     user = await users_collection().find_one(
-        {"firebase_uid": user_id},
+        {"firebaseUid": user_id},
         {"current_targets": 1, "_id": 0},
     )
     if not user or not user.get("current_targets"):
@@ -162,9 +162,9 @@ async def generate_meal_plan_endpoint(req: GenerateMealPlanRequest):
     # Fetch user profile — create a minimal stub if not yet in MongoDB
     # (this happens when the user completes onboarding but Firestore→MongoDB
     # sync hasn't run yet; targets will be calculated on the fly from defaults)
-    user = await users_collection().find_one({"firebase_uid": req.user_id})
+    user = await users_collection().find_one({"firebaseUid": req.user_id})
     if not user:
-        user = {"firebase_uid": req.user_id}
+        user = {"firebaseUid": req.user_id}
 
     # Calculate targets (or use cached)
     targets_data = user.get("current_targets")
@@ -233,7 +233,7 @@ async def adjust_meal_plan_endpoint(req: AdjustMealPlanRequest):
         )
 
     # Get user targets
-    user = await users_collection().find_one({"firebase_uid": req.user_id})
+    user = await users_collection().find_one({"firebaseUid": req.user_id})
     targets_data = user.get("current_targets", {})
     targets = MacroTargets(
         bmr=0, tdee=0,
@@ -338,10 +338,10 @@ async def analyze_mess_menu_endpoint(
             pass
 
     # Get user targets
-    user = await users_collection().find_one({"firebase_uid": user_id})
+    user = await users_collection().find_one({"firebaseUid": user_id})
     if not user:
         # Create a stub if MongoDB sync hasn't run yet
-        user = {"firebase_uid": user_id}
+        user = {"firebaseUid": user_id}
         
     targets_data = user.get("current_targets", {})
     if not targets_data:
@@ -370,7 +370,7 @@ async def analyze_mess_menu_endpoint(
     # Save the weekly plan to MongoDB
     plan_dict = result.model_dump()
     await users_collection().update_one(
-        {"firebase_uid": user_id},
+        {"firebaseUid": user_id},
         {"$set": {"current_weekly_mess_plan": plan_dict}},
         upsert=True
     )
@@ -381,7 +381,7 @@ async def analyze_mess_menu_endpoint(
 @router.get("/targets/{user_id}/mess-menu")
 async def get_weekly_mess_plan_endpoint(user_id: str):
     """Retrieve the user's cached weekly mess plan."""
-    user = await users_collection().find_one({"firebase_uid": user_id})
+    user = await users_collection().find_one({"firebaseUid": user_id})
     if not user or "current_weekly_mess_plan" not in user:
         raise HTTPException(
             status_code=404,
@@ -404,7 +404,7 @@ async def add_item_to_mess_menu_endpoint(
     from app.engines.nutrition.mess_menu_editor import edit_mess_menu
 
     # Get the cached plan
-    user = await users_collection().find_one({"firebase_uid": user_id})
+    user = await users_collection().find_one({"firebaseUid": user_id})
     if not user or "current_weekly_mess_plan" not in user:
         raise HTTPException(
             status_code=404,
@@ -418,7 +418,7 @@ async def add_item_to_mess_menu_endpoint(
     
     # Save the updated plan to MongoDB
     await users_collection().update_one(
-        {"firebase_uid": user_id},
+        {"firebaseUid": user_id},
         {"$set": {"current_weekly_mess_plan": updated_plan}}
     )
     

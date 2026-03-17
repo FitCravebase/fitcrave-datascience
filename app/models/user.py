@@ -43,7 +43,7 @@ class UserProfile(BaseModel):
     age: int
     weight_kg: float
     height_cm: float
-    gender: str  # "male" or "female"
+    gender: str  # "male", "female", or "other"
 
     # Fitness Profile
     activity_level: str = "moderately_active"
@@ -74,4 +74,3 @@ class UserProfile(BaseModel):
     onboarding_complete: bool = False
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
-

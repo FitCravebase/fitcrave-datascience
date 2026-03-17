@@ -9,7 +9,10 @@ from graph.graph_builder import graph
 from utils.logger import setup_logger
 
 import os
-from utils.db import get_db
+from app.database import connect_db, close_db
+
+# Import nutrition API router
+from app.engines.nutrition.router import router as nutrition_router
 
 logger = setup_logger(__name__)
 
@@ -39,12 +42,13 @@ async def lifespan(app: FastAPI):
     print(f"🚀 FitCrave AI Backend starting on {host}:{port}")
     print(f"📊 Environment: {env}")
 
-    # Initialize MongoDB
-    get_db()
+    # Initialize MongoDB (async)
+    await connect_db()
 
     yield
 
     # --- Shutdown ---
+    await close_db()
     print("🛑 FitCrave AI Backend shutting down...")
 
 app = FastAPI(
@@ -66,6 +70,17 @@ app.add_middleware(
 
 app.include_router(nutrition_router, prefix="/api/v1/nutrition")
 app.include_router(workout_router, prefix="/api/v1/workout")
+# ------------------------------------------------------------------
+# Register Nutrition API routes at /api/v1/nutrition
+# ------------------------------------------------------------------
+app.include_router(nutrition_router, prefix="/api/v1/nutrition", tags=["Nutrition"])
+
+# ------------------------------------------------------------------
+# Register Workout API routes at /api/v1/workout
+# ------------------------------------------------------------------
+from app.engines.workout.router import router as workout_router
+app.include_router(workout_router, prefix="/api/v1/workout", tags=["Workout"])
+
 # ------------------------------------------------------------------
 # Health Check
 # ------------------------------------------------------------------
@@ -132,3 +147,4 @@ async def chat(request: ChatRequest):
             session_id=request.session_id,
             agent_data={"error": str(e)}
         )
+
