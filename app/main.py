@@ -73,6 +73,12 @@ app.add_middleware(
 app.include_router(nutrition_router, prefix="/api/v1/nutrition", tags=["Nutrition"])
 
 # ------------------------------------------------------------------
+# Register Workout API routes at /api/v1/workout
+# ------------------------------------------------------------------
+from app.engines.workout.router import router as workout_router
+app.include_router(workout_router, prefix="/api/v1/workout", tags=["Workout"])
+
+# ------------------------------------------------------------------
 # Health Check
 # ------------------------------------------------------------------
 @app.get("/health", tags=["System"])

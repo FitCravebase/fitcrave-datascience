@@ -18,8 +18,8 @@ COPY . .
 # Set PYTHONPATH so absolute imports starting with "app." work securely
 ENV PYTHONPATH=/app
 
-# Expose the API port
-EXPOSE 8000
+# Expose the default API port
+EXPOSE 8080
 
-# Command to start the FastAPI server
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Command to start the FastAPI server (using shell form to read environment variables)
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}

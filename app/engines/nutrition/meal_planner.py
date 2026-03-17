@@ -77,7 +77,7 @@ async def generate_meal_plan(
 
     # Attach metadata
     result["date"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    result["user_id"] = user_context.get("firebase_uid", "")
+    result["user_id"] = user_context.get("firebaseUid", "")
     result["meal_count"] = meal_count
 
     return result
