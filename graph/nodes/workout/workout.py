@@ -42,8 +42,24 @@ def workout_node(state: AgentState):
         
         user_name = agent_data.get("user_name")
         location = agent_data.get("location")
+        user_profile = agent_data.get("user_profile", {})
+
         user_context_str = f" You are talking to {user_name}." if user_name else ""
         user_context_str += f" They are located in {location}." if location else ""
+        
+        if user_profile:
+            user_context_str += f"\nUSER PROFILE DATA:\n"
+            if user_profile.get("age"): user_context_str += f"- Age: {user_profile.get('age')}\n"
+            if user_profile.get("gender"): user_context_str += f"- Gender: {user_profile.get('gender')}\n"
+            if user_profile.get("weight"): user_context_str += f"- Weight: {user_profile.get('weight')} kg\n"
+            if user_profile.get("height"): user_context_str += f"- Height: {user_profile.get('height')} cm\n"
+            if user_profile.get("smp_goal"): user_context_str += f"- Primary Goal: {user_profile.get('smp_goal')}\n"
+            if user_profile.get("experience_level"): user_context_str += f"- Experience Level: {user_profile.get('experience_level')}\n"
+            if user_profile.get("weekly_available_days"): user_context_str += f"- Weekly Available Days: {user_profile.get('weekly_available_days')}\n"
+            if user_profile.get("session_duration_minutes"): user_context_str += f"- Session Duration: {user_profile.get('session_duration_minutes')} minutes\n"
+            if user_profile.get("equipment"): user_context_str += f"- Available Equipment: {', '.join(user_profile.get('equipment'))}\n"
+            if user_profile.get("injuries"): user_context_str += f"- Injuries/Limitations: {', '.join(user_profile.get('injuries'))}\n"
+
 
         system_prompt = (
             f"You are a specialized Workout and Fitness coach for the Fitcrave app.{user_context_str}\n"

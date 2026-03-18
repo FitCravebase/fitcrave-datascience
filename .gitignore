@@ -5,6 +5,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+firebase-service-account.json
 
 # Logs
 logs/

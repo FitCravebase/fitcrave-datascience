@@ -1,4 +1,5 @@
 from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import MemorySaver
 from graph.state import AgentState
 from graph.nodes.preprocessing import preprocessing_node
 from graph.nodes.routing import routing_node
@@ -48,5 +49,6 @@ builder.add_edge("meal_plan", "response")
 # Response node maps to End
 builder.add_edge("response", END)
 
-# Compile the graph
-graph = builder.compile()
+# Compile the graph with a checkpointer to persist state between turns
+checkpointer = MemorySaver()
+graph = builder.compile(checkpointer=checkpointer)

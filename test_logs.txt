@@ -1,0 +1,15 @@
+
+[Generated Plan JSON Schema Check]
+Generation Time: 26.41 seconds
+Plan Name: 3-Day Intermediate Hypertrophy (Full Body)
+Goal: Build muscle
+Weekly Notes: I have selected a Full Body split because it maximizes muscle protein synthesis frequency for a 3-day schedule. Focus on RPE 8 (leave 2 reps in the tank) for all sets. To support muscle growth, ensure you consume 1.6g-2g of protein per kg of body weight; prioritize Indian sources like Soya chunks, Paneer, and Dal-Chawal combinations if vegetarian, or Chicken/Eggs if non-vegetarian.
+
+Example Exercise Generated: Barbell Back Squat
+LLM generated target_sets/target_reps natively.
+Expanded to 3 WorkoutSets under the hood:
+  - Set 1: 8 reps (Rest: 120s)
+  - Set 2: 8 reps (Rest: 120s)
+  - Set 3: 8 reps (Rest: 120s)
+
+-----------------------------------------
