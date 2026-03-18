@@ -43,7 +43,7 @@ class _Settings:
 
     @property
     def APP_PORT(self) -> int:
-        return int(os.getenv("APP_PORT", "8000"))
+        return int(os.getenv("APP_PORT", "8080"))
 
     @property
     def APP_HOST(self) -> str:

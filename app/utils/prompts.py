@@ -49,3 +49,4 @@ Meals logged: {meals_logged_7d}
 Workouts completed: {workouts_completed_7d}
 Avg daily calories: {avg_calories_7d} kcal
 Weight trend: {weight_trend}"""
+

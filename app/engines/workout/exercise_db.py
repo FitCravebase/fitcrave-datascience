@@ -96,3 +96,4 @@ class ExerciseDatabase:
 # Initialize a global instance to be imported and used by the orchestrator/engines
 # so that the JSON is only loaded from disk once on startup.
 exercise_db = ExerciseDatabase()
+

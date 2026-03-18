@@ -19,8 +19,30 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Configure the client with API key
-_client = genai.Client(api_key=settings.GEMINI_API_KEY)
+_client: genai.Client | None = None
+
+
+def _get_client() -> genai.Client:
+    """
+    Lazily initialize the GenAI client.
+
+    Cloud Run may start the container before env vars are set correctly; we
+    avoid crashing at import time and instead raise a clear error only when
+    the LLM is actually invoked.
+    """
+    global _client
+    if _client is not None:
+        return _client
+
+    api_key = getattr(settings, "GEMINI_API_KEY", "") or ""
+    if not api_key.strip():
+        raise ValueError(
+            "GEMINI_API_KEY is missing. Set it as an environment variable in Cloud Run "
+            "or provide it in your .env file."
+        )
+
+    _client = genai.Client(api_key=api_key)
+    return _client
 
 
 class GeminiClient:
@@ -35,7 +57,6 @@ class GeminiClient:
     @staticmethod
     def _extract_json(text: str) -> dict[str, Any]:
         """Strip markdown fences and parse the first JSON object/array."""
-        # Remove ```json … ``` wrappers
         cleaned = re.sub(r"```(?:json)?\s*", "", text).strip()
         cleaned = cleaned.rstrip("`").strip()
         return json.loads(cleaned)
@@ -53,7 +74,7 @@ class GeminiClient:
         if system_instruction:
             contents = system_instruction + "\n\n" + prompt
 
-        response = await _client.aio.models.generate_content(
+        response = await _get_client().aio.models.generate_content(
             model=self._model,
             contents=contents,
             config=types.GenerateContentConfig(temperature=temperature),
@@ -71,7 +92,7 @@ class GeminiClient:
         if system_instruction:
             contents = system_instruction + "\n\n" + prompt
 
-        response = await _client.aio.models.generate_content(
+        response = await _get_client().aio.models.generate_content(
             model=self._model,
             contents=contents,
             config=types.GenerateContentConfig(temperature=temperature),
@@ -88,7 +109,7 @@ class GeminiClient:
         """Send an image + prompt to Gemini Vision and parse JSON response."""
         image_part = types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
 
-        response = await _client.aio.models.generate_content(
+        response = await _get_client().aio.models.generate_content(
             model=self._vision_model,
             contents=[prompt, image_part],
             config=types.GenerateContentConfig(temperature=temperature),

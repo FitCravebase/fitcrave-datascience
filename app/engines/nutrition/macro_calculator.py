@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Gender(str, Enum):
@@ -31,7 +31,6 @@ class FitnessGoal(str, Enum):
     muscle_gain = "muscle_gain"
 
 
-# Multipliers
 _ACTIVITY_MULTIPLIERS = {
     ActivityLevel.sedentary: 1.2,
     ActivityLevel.lightly_active: 1.375,
@@ -48,9 +47,11 @@ _GOAL_ADJUSTMENTS = {
 
 
 class MacroTargets(BaseModel):
-    bmr: float
-    tdee: float
-    target_calories: int
+    """Calorie + macro targets for a single day."""
+
+    bmr: float = Field(..., description="Basal Metabolic Rate (kcal)")
+    tdee: float = Field(..., description="Total Daily Energy Expenditure (kcal)")
+    target_calories: int = Field(..., description="Adjusted calories for the goal")
     protein_g: int
     carbs_g: int
     fat_g: int
@@ -80,7 +81,7 @@ def calculate_macro_targets(
 
     # Macro split
     if goal == FitnessGoal.fat_loss:
-        protein_g = int(weight_kg * 2.2)   # high protein for fat loss
+        protein_g = int(weight_kg * 2.2)   # high protein preserves muscle during deficit
         fat_g = int(weight_kg * 0.9)
     elif goal == FitnessGoal.muscle_gain:
         protein_g = int(weight_kg * 2.0)

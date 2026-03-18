@@ -89,8 +89,8 @@ async def generate_workout_plan(
       - ExRx.net population-based strength standards (first plan)
     """
     equipment_str = ", ".join(user_context.equipment) if user_context.equipment else "body weight only"
-    injuries_str  = ", ".join(user_context.injuries)  if user_context.injuries  else "None"
-    target_timeline_str = user_context.target_timeline or "No specific timeline"
+    injuries_str  = ", ".join(getattr(user_context, "injuries", [])) or "None"
+    target_timeline_str = getattr(user_context, "target_timeline", None) or "No specific timeline"
     body_weight_kg = getattr(user_context, 'weight_kg', 70.0)
     experience_level = user_context.experience_level
 
@@ -121,7 +121,6 @@ async def generate_workout_plan(
 
     continuity_instructions = ""
     if previous_plan_dict:
-        # Simplify the previous plan to avoid token bloat and ensure focus
         simple_sessions = []
         for session in previous_plan_dict.get('sessions', []):
             simple_ex = [{"exercise_name": e.get("exercise_name")} for e in session.get('exercises', [])]
@@ -130,7 +129,7 @@ async def generate_workout_plan(
                 "focus_area": session.get("focus_area"),
                 "exercises": simple_ex
             })
-            
+
         continuity_instructions = (
             "## PROGRAM CONTINUITY (CRITICAL)\n"
             "You are advancing the user to the next week of their current mesocycle. "
@@ -138,7 +137,7 @@ async def generate_workout_plan(
             "Your ONLY job is to update the target_sets, target_reps, target_rpe, and weight_kg based on the progressive overload data.\n"
             f"PREVIOUS PLAN STRUCTURE:\n{json.dumps(simple_sessions, indent=2)}"
         )
-        
+
     prompt = WORKOUT_PLAN_PROMPT.format(
         days_per_week=user_context.weekly_available_days,
         goal=user_context.goal,
@@ -152,47 +151,39 @@ async def generate_workout_plan(
         continuity_instructions=continuity_instructions,
     )
 
-    # Call Gemini JSON mode
     raw_json_dict = await gemini_client.generate_json(
         prompt=prompt,
         system_instruction=FITCRAVE_SYSTEM_INSTRUCTION,
         temperature=0.2
     )
-    
-    # Parse the dictionary back into the lean LLM Pydantic schema
+
     llm_plan = LLMWorkoutPlan.model_validate(raw_json_dict)
-    
-    # Expand the lean LLM representation into the full Firestore schema (with WorkoutSet arrays)
     plan = llm_plan.to_firestore_model()
-    
-    # --- PHASE 3: Fuzzy Matching & YouTube Fallback ---
-    # Create a simple dictionary of allowed names to their objects for fast lookup
+
+    # Fuzzy match exercise names against the local DB; attach video IDs where available
     allowed_names = {ex.name: ex for ex in exercise_db.exercises}
     allowed_name_list = list(allowed_names.keys())
-    
+
     for session in plan.sessions:
         for p_ex in session.exercises:
             best_match, score = process.extractOne(
-                p_ex.exercise_name, 
-                allowed_name_list, 
+                p_ex.exercise_name,
+                allowed_name_list,
                 scorer=fuzz.token_sort_ratio
             )
-            
+
             if score >= 85:
-                # Strong match! We can safely use our DB exercise and its specific video ID
                 matched_db_ex = allowed_names[best_match]
-                p_ex.exercise_name = matched_db_ex.name # Correct the typo into official name
+                p_ex.exercise_name = matched_db_ex.name
                 p_ex.video_id = matched_db_ex.video_id
             else:
-                # Weak or no match (LLM hallucinated a completely new valid exercise)
-                # Fallback to the Universal YouTube search link
                 query = quote_plus(f"How to do {p_ex.exercise_name} exercise proper form tutorial")
                 p_ex.youtube_search_url = f"https://www.youtube.com/results?search_query={query}"
                 p_ex.video_id = None
-                
+
                 logger.warning(
-                    f"Exercise '{p_ex.exercise_name}' not found locally (Best match: {best_match} @ {score}%). "
-                    f"Generated fallback URL."
+                    f"Exercise '{p_ex.exercise_name}' not found locally "
+                    f"(Best match: {best_match} @ {score}%). Generated fallback URL."
                 )
-    
+
     return plan

@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
 from beanie import Document
+from pydantic import BaseModel, Field
 
 
 class WeightEntry(BaseModel):
@@ -48,7 +48,6 @@ class UserProfile(Document):
     weight_kg: float
     height_cm: float
     gender: str  # "male", "female", or "other"
-    target_timeline: str | None = None
 
     # Fitness Profile
     activity_level: str = "moderately_active"
@@ -61,8 +60,12 @@ class UserProfile(Document):
     allergies: list[str] = Field(default_factory=list)
     disliked_foods: list[str] = Field(default_factory=list)
 
-    # Equipment
+    # Equipment & Injury Constraints
     equipment: list[str] = Field(default_factory=list)
+    injuries: list[str] = Field(default_factory=list)
+
+    # Goals
+    target_timeline: str | None = None  # e.g. "lose 5kg in 3 months"
 
     # Schedule
     weekly_available_days: int = 5
@@ -77,6 +80,5 @@ class UserProfile(Document):
     # Tracking
     fcm_token: str | None = None  # For push notifications
     onboarding_complete: bool = False
-    injuries: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
