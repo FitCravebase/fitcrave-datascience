@@ -107,7 +107,7 @@ async def _generate_and_save_plan(user_id: str) -> None:
             height_cm=doc_dict.get("height") or 170.0,
             weight_kg=doc_dict.get("weight_kg") or doc_dict.get("weight") or 70.0,
             activity_level=doc_dict.get("activity_level") or "moderately_active",
-            goal=doc_dict.get("swp_goal") or "General Fitness",
+            goal=", ".join(doc_dict.get("swp_goals") or []) or doc_dict.get("swp_goal") or "General Fitness",
             experience_level=doc_dict.get("experience_level") or "beginner",
             weekly_available_days=doc_dict.get("weekly_available_days") or 3,
             session_duration_minutes=int(
