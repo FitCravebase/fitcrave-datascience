@@ -245,7 +245,7 @@ async def adjust_meal_plan_endpoint(req: AdjustMealPlanRequest):
         explanation="From user profile",
     )
 
-    adjusted = await adjust_meal_plan(current, req.feedback, targets)
+    adjusted = await adjust_meal_plan(current, req.feedback, targets, user_context=user)
     plan_id = await save_meal_plan(req.user_id, adjusted)
     adjusted["plan_id"] = plan_id
 

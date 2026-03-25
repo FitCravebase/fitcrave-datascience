@@ -49,6 +49,7 @@ def meal_plan_node(state: AgentState):
             if user_profile.get("smp_goal"): user_context_str += f"- Primary Goal: {user_profile.get('smp_goal')}\n"
             if user_profile.get("activity_level"): user_context_str += f"- Activity Level: {user_profile.get('activity_level')}\n"
             if user_profile.get("dietary_restrictions"): user_context_str += f"- Dietary Restrictions: {', '.join(user_profile.get('dietary_restrictions'))}\n"
+            if user_profile.get("diet_preference"): user_context_str += f"- Diet Preference: {user_profile.get('diet_preference')}\n"
             if user_profile.get("allergies"): user_context_str += f"- Allergies: {', '.join(user_profile.get('allergies'))}\n"
             if user_profile.get("meal_count_per_day"): user_context_str += f"- Meals Per Day: {user_profile.get('meal_count_per_day')}\n"
         
